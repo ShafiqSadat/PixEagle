@@ -54,6 +54,13 @@ from classes.following_readiness import (
     get_configured_follower_execution_mode,
 )
 from classes.tracker_runtime_status import evaluate_tracker_command_freshness
+from classes.tracking_recovery import (
+    RecoveryDetectionResult,
+    RecoveryHint,
+    RecoverySearchPlan,
+    RecoverySearchRequirements,
+    build_recovery_search_plan,
+)
 
 # Import the SmartTracker module (conditional - may not be available without AI packages)
 try:
@@ -1764,7 +1771,11 @@ class AppController:
         ):
             self._tracking_recovery_attempts += 1
             attempt = self._tracking_recovery_attempts
-            result = self.handle_tracking_failure(analysis_frame)
+            result = self.handle_tracking_failure(
+                analysis_frame,
+                attempt=attempt,
+                max_attempts=max_attempts,
+            )
             if not self._tracking_session_is_current(expected_generation):
                 return frame
             interval = timeout / (max_attempts + 1) if max_attempts else timeout
@@ -1840,7 +1851,13 @@ class AppController:
         self._advance_tracking_session_generation()
         return True
 
-    def handle_tracking_failure(self, frame: Optional[np.ndarray] = None):
+    def handle_tracking_failure(
+        self,
+        frame: Optional[np.ndarray] = None,
+        *,
+        attempt: Optional[int] = None,
+        max_attempts: Optional[int] = None,
+    ):
         """
         Handles tracking failure by attempting re-detection using the detector.
         Only used in classic mode.
@@ -1852,9 +1869,15 @@ class AppController:
             
         if Parameters.USE_DETECTOR and Parameters.AUTO_REDETECT:
             logging.info("Attempting to re-detect the target using the detector.")
-            redetect_result = self.initiate_redetection(frame=frame)
+            redetect_result = self.initiate_redetection(
+                frame=frame,
+                attempt=attempt,
+                max_attempts=max_attempts,
+            )
             if redetect_result["success"]:
-                logging.info("Target re-detected and tracker re-initialized.")
+                logging.info(
+                    "Re-detection candidate initialized; awaiting a fresh tracker measurement."
+                )
             else:
                 logging.info("Re-detection attempt failed. Retrying...")
             return redetect_result
@@ -2201,9 +2224,131 @@ class AppController:
                 return det
         return None
 
+    def _classic_recovery_hint(self) -> RecoveryHint:
+        """Read one tracker hint, with a compatibility path for old plugins."""
+        hint_getter = getattr(self.tracker, "get_recovery_hint", None)
+        try:
+            recovery_hint = hint_getter() if callable(hint_getter) else None
+        except Exception as exc:
+            logging.warning("Tracker recovery hint failed: %s", exc)
+            recovery_hint = None
+        if isinstance(recovery_hint, RecoveryHint):
+            return recovery_hint
+
+        estimate_getter = getattr(self.tracker, "get_estimated_position", None)
+        try:
+            estimate = estimate_getter() if callable(estimate_getter) else None
+        except Exception:
+            estimate = None
+        failure_info = getattr(self.tracker, "last_failure_info", None)
+        last_seen_bbox = getattr(failure_info, "last_seen_bbox", None)
+        if last_seen_bbox is None:
+            last_seen_bbox = (
+                getattr(self.tracker, "prev_bbox", None)
+                or getattr(self.tracker, "bbox", None)
+            )
+        return RecoveryHint(
+            predicted_center=estimate,
+            last_seen_bbox=last_seen_bbox,
+            prediction_reliable=estimate is not None,
+            exit_edge=getattr(failure_info, "exit_edge", None),
+        )
+
+    def _detector_recovery_requirements(self) -> RecoverySearchRequirements:
+        """Read detector geometry requirements without trusting plugin output."""
+        requirements_getter = getattr(
+            self.detector,
+            "get_recovery_search_requirements",
+            None,
+        )
+        try:
+            requirements = (
+                requirements_getter()
+                if callable(requirements_getter)
+                else RecoverySearchRequirements()
+            )
+        except Exception as exc:
+            logging.warning("Detector search requirements failed: %s", exc)
+            requirements = RecoverySearchRequirements()
+        if isinstance(requirements, RecoverySearchRequirements):
+            return requirements
+        return RecoverySearchRequirements()
+
+    def _classic_recovery_search_plan(
+        self,
+        frame: np.ndarray,
+        *,
+        attempt: int,
+        max_attempts: int,
+    ) -> RecoverySearchPlan:
+        """Resolve one configured search step from canonical shared contracts."""
+        return build_recovery_search_plan(
+            frame_shape=frame.shape,
+            hint=self._classic_recovery_hint(),
+            requirements=self._detector_recovery_requirements(),
+            attempt=attempt,
+            max_attempts=max_attempts,
+            min_local_radius=Parameters.MIN_SEARCH_RADIUS,
+            max_local_radius=Parameters.REDETECTION_SEARCH_RADIUS,
+            uncertainty_scale_factor=Parameters.UNCERTAINTY_SCALE_FACTOR,
+            global_search_attempts=getattr(
+                Parameters,
+                "REDETECTION_GLOBAL_SEARCH_ATTEMPTS",
+                2,
+            ),
+        )
+
+    def _reinitialize_recovery_candidate(
+        self,
+        frame: np.ndarray,
+        bbox: Tuple[int, int, int, int],
+    ) -> Tuple[bool, Optional[str]]:
+        """Reinitialize a tracker without replacing detector target identity."""
+        snapshot_identity = getattr(
+            self.detector,
+            "snapshot_identity_state",
+            None,
+        )
+        try:
+            detector_identity = (
+                snapshot_identity() if callable(snapshot_identity) else None
+            )
+        except Exception as exc:
+            return False, f"could not preserve detector identity: {exc}"
+
+        restore_identity = getattr(
+            self.detector,
+            "restore_identity_state",
+            None,
+        )
+        try:
+            self.tracker.reinitialize_tracker(frame, bbox)
+            if detector_identity is not None and callable(restore_identity):
+                restore_identity(detector_identity)
+            set_latest_bbox = getattr(self.detector, "set_latest_bbox", None)
+            if callable(set_latest_bbox):
+                set_latest_bbox(bbox)
+            self.tracking_started = True
+            return True, None
+        except Exception as exc:
+            if detector_identity is not None and callable(restore_identity):
+                try:
+                    restore_identity(detector_identity)
+                except Exception:
+                    logging.exception(
+                        "Could not restore detector identity after recovery failure"
+                    )
+            stop_tracking = getattr(self.tracker, "stop_tracking", None)
+            if callable(stop_tracking):
+                stop_tracking()
+            return False, str(exc)
+
     def initiate_redetection(
         self,
         frame: Optional[np.ndarray] = None,
+        *,
+        attempt: Optional[int] = None,
+        max_attempts: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Attempts to re-detect the target using the detector (classic mode only).
@@ -2226,97 +2371,176 @@ class AppController:
                 "message": "Tracker/model state barrier is unavailable.",
             }
         with state_lock:
-            return self._initiate_redetection_locked(frame=frame)
+            return self._initiate_redetection_locked(
+                frame=frame,
+                attempt=attempt,
+                max_attempts=max_attempts,
+            )
 
     def _initiate_redetection_locked(
         self,
         frame: Optional[np.ndarray] = None,
+        *,
+        attempt: Optional[int] = None,
+        max_attempts: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Detect and reinitialize one target while tracker identity is stable."""
-        if Parameters.USE_DETECTOR:
-            recovery_frame = frame
-            if recovery_frame is None:
-                recovery_frame = self.get_tracking_input_frame_snapshot()
-            if recovery_frame is None:
-                return {
-                    "success": False,
-                    "message": "Re-detection requires a current tracking frame.",
-                }
-            frame_height, frame_width = recovery_frame.shape[:2]
-            estimate = self.tracker.get_estimated_position()
-            if estimate:
-                estimated_x, estimated_y = estimate[:2]
-                search_radius = Parameters.REDETECTION_SEARCH_RADIUS
-                x_min = max(0, int(estimated_x - search_radius))
-                x_max = min(frame_width, int(estimated_x + search_radius))
-                y_min = max(0, int(estimated_y - search_radius))
-                y_max = min(frame_height, int(estimated_y + search_radius))
-                search_region = (x_min, y_min, x_max - x_min, y_max - y_min)
-                redetect_result = self.detector.smart_redetection(
-                    recovery_frame, self.tracker, roi=search_region
-                )
-            else:
-                redetect_result = self.detector.smart_redetection(
-                    recovery_frame,
-                    self.tracker,
-                )
-
-            if redetect_result:
-                detected_bbox = self.detector.get_latest_bbox()
-                try:
-                    bbox_pixels = tracking_roi_to_pixels(
-                        x=detected_bbox[0],
-                        y=detected_bbox[1],
-                        width=detected_bbox[2],
-                        height=detected_bbox[3],
-                        coordinate_space="pixels",
-                        frame_width=frame_width,
-                        frame_height=frame_height,
-                    )
-                except (IndexError, TypeError, TrackingROIError) as exc:
-                    logging.warning("Rejected invalid re-detection ROI: %s", exc)
-                    return {
-                        "success": False,
-                        "message": "Re-detection returned an invalid bounding box.",
-                    }
-                bbox_tuple = (
-                    bbox_pixels["x"],
-                    bbox_pixels["y"],
-                    bbox_pixels["width"],
-                    bbox_pixels["height"],
-                )
-                try:
-                    self.tracker.reinitialize_tracker(recovery_frame, bbox_tuple)
-                    self.tracking_started = True
-                except Exception as exc:
-                    stop_tracking = getattr(self.tracker, "stop_tracking", None)
-                    if callable(stop_tracking):
-                        stop_tracking()
-                    logging.warning(
-                        "Re-detection tracker initialization failed: %s",
-                        exc,
-                    )
-                    return {
-                        "success": False,
-                        "message": "Re-detection could not initialize the tracker.",
-                    }
-                logging.info("Re-detection successful and tracker re-initialized.")
-                return {
-                    "success": True,
-                    "message": "Re-detection successful and tracker re-initialized.",
-                    "bounding_box": bbox_tuple,
-                }
-            else:
-                logging.info("Re-detection failed or no new object found.")
-                return {
-                    "success": False,
-                    "message": "Re-detection failed or no new object found."
-                }
-        else:
+        if not Parameters.USE_DETECTOR:
             return {
                 "success": False,
                 "message": "Detector is not enabled."
             }
+        if self.tracker is None or self.detector is None:
+            return {
+                "success": False,
+                "message": "Tracker or detector is unavailable.",
+            }
+
+        recovery_frame = frame
+        if recovery_frame is None:
+            recovery_frame = self.get_tracking_input_frame_snapshot()
+        if recovery_frame is None:
+            return {
+                "success": False,
+                "message": "Re-detection requires a current tracking frame.",
+            }
+        frame_height, frame_width = recovery_frame.shape[:2]
+
+        _, configured_attempts = self._classic_tracking_recovery_policy()
+        effective_max_attempts = max_attempts or configured_attempts or 1
+        effective_attempt = attempt or effective_max_attempts
+
+        try:
+            search_plan = self._classic_recovery_search_plan(
+                recovery_frame,
+                attempt=effective_attempt,
+                max_attempts=effective_max_attempts,
+            )
+        except (TypeError, ValueError) as exc:
+            logging.warning("Re-detection search planning failed: %s", exc)
+            return {
+                "success": False,
+                "message": "Re-detection search configuration is invalid.",
+            }
+
+        logging.info(
+            "Re-detection attempt %d/%d: %s search (%s anchor, roi=%s)",
+            search_plan.attempt,
+            search_plan.max_attempts,
+            search_plan.scope,
+            search_plan.anchor_source,
+            search_plan.roi,
+        )
+        detection_result = None
+        detected_bbox = None
+        proposal_getter = getattr(self.detector, "propose_recovery", None)
+        try:
+            if callable(proposal_getter):
+                detection_result = proposal_getter(
+                    recovery_frame,
+                    self.tracker,
+                    roi=search_plan.roi,
+                )
+                if not isinstance(detection_result, RecoveryDetectionResult):
+                    logging.warning(
+                        "Detector returned an invalid typed recovery proposal"
+                    )
+                    detection_result = RecoveryDetectionResult(
+                        accepted=False,
+                        reason="invalid_detector_proposal",
+                    )
+                elif detection_result.candidate is not None:
+                    detected_bbox = detection_result.candidate.bbox
+            else:
+                legacy_success = self.detector.smart_redetection(
+                    recovery_frame,
+                    self.tracker,
+                    roi=search_plan.roi,
+                )
+                if legacy_success:
+                    detected_bbox = self.detector.get_latest_bbox()
+                detection_result = RecoveryDetectionResult(
+                    accepted=bool(legacy_success),
+                    reason=(
+                        "legacy_single_candidate"
+                        if legacy_success
+                        else "no_validated_candidate"
+                    ),
+                    candidate_count=1 if legacy_success else 0,
+                )
+        except Exception as exc:
+            logging.warning("Re-detection detector attempt failed: %s", exc)
+            detection_result = RecoveryDetectionResult(
+                accepted=False,
+                reason="detector_error",
+            )
+
+        if not detection_result.accepted or detected_bbox is None:
+            if detection_result.ambiguous:
+                message = (
+                    "Re-detection found similar candidates but could not "
+                    "confirm a unique target."
+                )
+            else:
+                message = "Re-detection failed or no validated target was found."
+            logging.info("%s", message)
+            return {
+                "success": False,
+                "message": message,
+                "search_scope": search_plan.scope,
+                "recovery_reason": detection_result.reason,
+                "candidate_count": detection_result.candidate_count,
+                "ambiguous": detection_result.ambiguous,
+            }
+
+        try:
+            bbox_pixels = tracking_roi_to_pixels(
+                x=detected_bbox[0],
+                y=detected_bbox[1],
+                width=detected_bbox[2],
+                height=detected_bbox[3],
+                coordinate_space="pixels",
+                frame_width=frame_width,
+                frame_height=frame_height,
+            )
+        except (IndexError, TypeError, TrackingROIError) as exc:
+            logging.warning("Rejected invalid re-detection ROI: %s", exc)
+            return {
+                "success": False,
+                "message": "Re-detection returned an invalid bounding box.",
+            }
+        bbox_tuple = (
+            bbox_pixels["x"],
+            bbox_pixels["y"],
+            bbox_pixels["width"],
+            bbox_pixels["height"],
+        )
+
+        initialized, initialization_error = self._reinitialize_recovery_candidate(
+            recovery_frame,
+            bbox_tuple,
+        )
+        if not initialized:
+            logging.warning(
+                "Re-detection tracker initialization failed: %s",
+                initialization_error,
+            )
+            return {
+                "success": False,
+                "message": "Re-detection could not initialize the tracker.",
+            }
+
+        logging.info(
+            "Re-detection candidate initialized; waiting for a fresh tracker measurement"
+        )
+        return {
+            "success": True,
+            "message": "Re-detection candidate initialized.",
+            "bounding_box": bbox_tuple,
+            "search_scope": search_plan.scope,
+            "candidate_count": detection_result.candidate_count,
+            "confidence_margin": detection_result.confidence_margin,
+        }
 
     def show_current_frame(self, frame_title: str = Parameters.FRAME_TITLE) -> np.ndarray:
         """

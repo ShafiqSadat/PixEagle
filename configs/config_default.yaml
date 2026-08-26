@@ -1509,10 +1509,16 @@ Detector:
   
   # === Re-detection Parameters ===
   AUTO_REDETECT: true
-  REDETECTION_SEARCH_RADIUS: 300            # Pixels
-  MIN_SEARCH_RADIUS: 50
-  UNCERTAINTY_SCALE_FACTOR: 2.0
-  ESTIMATOR_UNCERTAINTY_THRESHOLD: 1000.0
+  # Local searches expand from a target-size-aware radius, then the final
+  # attempts search the complete image for targets that leave and re-enter.
+  REDETECTION_SEARCH_RADIUS: 300            # Maximum local-search radius (px)
+  MIN_SEARCH_RADIUS: 50                     # Minimum local-search radius (px)
+  UNCERTAINTY_SCALE_FACTOR: 2.0              # Target-extent multiplier for initial radius
+  ESTIMATOR_UNCERTAINTY_THRESHOLD: 1000.0    # Maximum estimator covariance trace for local guidance
+  REDETECTION_GLOBAL_SEARCH_ATTEMPTS: 2      # Final attempts reserved for full-frame search
+  REDETECTION_MAX_CANDIDATES: 5              # Bounded spatial candidates evaluated per attempt
+  REDETECTION_CANDIDATE_NMS_IOU: 0.3         # Merge overlapping multi-scale/template proposals
+  REDETECTION_MIN_CONFIDENCE_MARGIN: 0.05    # Reject lookalikes too close to the best identity score
 
 # ==============================================================================
 # GSTREAMER PIPELINE TEMPLATES

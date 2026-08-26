@@ -441,6 +441,55 @@ SCHEMA_OVERRIDES = {
         ],
         'description': 'OpenCV template-matching score method; normalized methods are recommended',
     },
+    'Detector.AUTO_REDETECT': {
+        'description': 'Enable bounded detector-assisted recovery for classic visual trackers',
+    },
+    'Detector.REDETECTION_SEARCH_RADIUS': {
+        'min': 1,
+        'max': 10000,
+        'unit': 'px',
+        'description': 'Maximum radius reached by expanding local recovery searches',
+    },
+    'Detector.MIN_SEARCH_RADIUS': {
+        'min': 1,
+        'max': 10000,
+        'unit': 'px',
+        'description': 'Minimum radius for a local recovery search',
+    },
+    'Detector.UNCERTAINTY_SCALE_FACTOR': {
+        'min': 0.0,
+        'max': 20.0,
+        'step': 0.1,
+        'description': 'Target-extent multiplier used to size the first local recovery search',
+    },
+    'Detector.ESTIMATOR_UNCERTAINTY_THRESHOLD': {
+        'min': 0.0,
+        'max': 1000000000.0,
+        'step': 1.0,
+        'description': 'Maximum estimator covariance trace accepted for local search guidance',
+    },
+    'Detector.REDETECTION_GLOBAL_SEARCH_ATTEMPTS': {
+        'min': 0,
+        'max': 100,
+        'description': 'Final recovery attempts reserved for full-frame search',
+    },
+    'Detector.REDETECTION_MAX_CANDIDATES': {
+        'min': 1,
+        'max': 50,
+        'description': 'Maximum spatially distinct recovery candidates evaluated per attempt',
+    },
+    'Detector.REDETECTION_CANDIDATE_NMS_IOU': {
+        'min': 0.0,
+        'max': 1.0,
+        'step': 0.01,
+        'description': 'IoU threshold for merging duplicate multi-scale recovery proposals',
+    },
+    'Detector.REDETECTION_MIN_CONFIDENCE_MARGIN': {
+        'min': 0.0,
+        'max': 1.0,
+        'step': 0.01,
+        'description': 'Minimum identity-score lead required over a similar recovery candidate',
+    },
     'Segmentation.DEFAULT_SEGMENTATION_ALGORITHM': {
         'options': load_segmentation_schema_options(),
         'description': (

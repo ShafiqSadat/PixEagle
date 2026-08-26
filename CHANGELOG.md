@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## Version 7.1.2 (2026-08-26) - Shared Classic Recovery
+
+- Replace the fixed classic-tracker re-detection crop with one shared,
+  target-size-aware local-to-global search planner for CSRT, KCF, SparseFlow,
+  dlib, and future `BaseTracker` providers. Out-of-frame predictions now produce
+  valid edge searches, final attempts cover the full image, detector identity
+  survives automatic reinitialization, and one trusted recent appearance view
+  complements the immutable operator-selected template. Spatially distinct
+  lookalike candidates now require a configurable confidence lead; ambiguous
+  recovery does not mutate tracker or identity state, and a tentative accepted
+  box is not learned until the normal high-confidence measurement path permits
+  it. Recovery remains bounded and follower-ineligible until a fresh measured
+  update succeeds.
+
 ## Version 7.1.1 (2026-08-26) - Sparse Configuration Compatibility
 
 - Allow the Sparse Flow tracker to use checked-in defaults when an older local

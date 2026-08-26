@@ -34,6 +34,7 @@ from typing import Optional, Tuple, Dict, Any
 import cv2
 from classes.parameters import Parameters
 from classes.tracker_output import TrackerOutput, TrackerDataType
+from classes.tracking_recovery import RecoveryHint
 import logging
 
 logger = logging.getLogger(__name__)
@@ -538,6 +539,56 @@ class BaseTracker(ABC):
             if estimated_position is not None and len(estimated_position) >= 2:
                 return (estimated_position[0], estimated_position[1])
         return None
+
+    def is_recovery_prediction_reliable(self) -> bool:
+        """Return whether the estimator is suitable for local recovery search."""
+        estimate = self.get_estimated_position()
+        if estimate is None or len(estimate) < 2:
+            return False
+        try:
+            if not all(np.isfinite(float(value)) for value in estimate[:2]):
+                return False
+        except (TypeError, ValueError):
+            return False
+
+        reliability_check = getattr(
+            self.position_estimator,
+            'is_estimate_reliable',
+            None,
+        )
+        if not callable(reliability_check):
+            return True
+        try:
+            return bool(
+                reliability_check(Parameters.ESTIMATOR_UNCERTAINTY_THRESHOLD)
+            )
+        except Exception as exc:
+            logger.warning(
+                "%s estimator reliability check failed (%s); using last measurement",
+                self.tracker_name,
+                exc,
+            )
+            return False
+
+    def get_recovery_hint(self) -> RecoveryHint:
+        """Expose generic recovery context without owning retry policy."""
+        failure_info = self.last_failure_info
+        last_seen_bbox = (
+            failure_info.last_seen_bbox
+            if failure_info and failure_info.last_seen_bbox
+            else self.prev_bbox or self.bbox
+        )
+        predicted_center = self.get_estimated_position()
+        return RecoveryHint(
+            predicted_center=predicted_center,
+            last_seen_bbox=last_seen_bbox,
+            prediction_reliable=self.is_recovery_prediction_reliable(),
+            exit_edge=(
+                failure_info.exit_edge
+                if failure_info and failure_info.exit_edge
+                else self.exit_edge
+            ),
+        )
 
     def _get_estimator_prediction(
         self,

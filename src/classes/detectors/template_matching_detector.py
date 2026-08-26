@@ -1,13 +1,30 @@
 # src/classes/detectors/template_matching_detector.py
 
+from dataclasses import dataclass
+import math
+from typing import Any, Dict, List, Optional, Tuple
+
 import cv2
 import numpy as np
-from typing import Optional, Tuple
+
 from .base_detector import BaseDetector
 from classes.parameters import Parameters
+from classes.tracking_recovery import (
+    RecoveryCandidate,
+    RecoveryDetectionResult,
+    RecoverySearchRequirements,
+)
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _TemplateMatchCandidate:
+    bbox: Tuple[int, int, int, int]
+    match_confidence: float
+    raw_score: float
+    template_source: str
 
 class TemplateMatchingDetector(BaseDetector):
     """
@@ -23,11 +40,14 @@ class TemplateMatchingDetector(BaseDetector):
         """
         super().__init__()
         self.template: Optional[np.ndarray] = None
+        self.trusted_template: Optional[np.ndarray] = None
+        self.trusted_features: Optional[np.ndarray] = None
         self.latest_bbox: Optional[Tuple[int, int, int, int]] = None
         self.method = self.get_matching_method(Parameters.TEMPLATE_MATCHING_METHOD)
         self.initial_features: Optional[np.ndarray] = None
         self.adaptive_features: Optional[np.ndarray] = None
         self.latest_match_score: Optional[float] = None
+        self.latest_template_source: Optional[str] = None
 
     @staticmethod
     def get_matching_method(method_name: str):
@@ -68,12 +88,14 @@ class TemplateMatchingDetector(BaseDetector):
         if self.template is None:
             self.template = frame[y:y+h, x:x+w].copy()
             self.initial_template = self.template.copy()
+            self.trusted_template = self.template.copy()
             logger.debug("Template extracted and set for template matching.")
 
         # Initialize features if not set
         if self.initial_features is None:
             self.initial_features = features.copy()
             self.adaptive_features = features.copy()
+            self.trusted_features = features.copy()
             logger.debug("Initial features set for template matching.")
 
         self.latest_bbox = bbox
@@ -89,10 +111,13 @@ class TemplateMatchingDetector(BaseDetector):
         features = BaseDetector.extract_features(self, frame, normalized_bbox)
         self.template = roi.copy()
         self.initial_template = roi.copy()
+        self.trusted_template = roi.copy()
         self.initial_features = features.copy()
         self.adaptive_features = features.copy()
+        self.trusted_features = features.copy()
         self.latest_bbox = normalized_bbox
         self.latest_match_score = None
+        self.latest_template_source = None
         return features
 
     def update_template(self, frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> None:
@@ -103,147 +128,443 @@ class TemplateMatchingDetector(BaseDetector):
             frame (np.ndarray): The current video frame.
             bbox (Tuple[int, int, int, int]): Bounding box (x, y, w, h).
         """
-        features = super().extract_features(frame, bbox)
-        # Update adaptive features only
-        self.adaptive_features = (1 - Parameters.TEMPLATE_APPEARANCE_LEARNING_RATE) * self.adaptive_features + \
-                                 Parameters.TEMPLATE_APPEARANCE_LEARNING_RATE * features
-        logger.debug(f"TEMPLATE: Adaptive features updated (Learning rate: {Parameters.TEMPLATE_APPEARANCE_LEARNING_RATE})")
+        try:
+            normalized_bbox, roi = self._validated_target_roi(frame, bbox)
+        except (TypeError, ValueError):
+            logger.debug("Skipped trusted recovery view outside the current frame")
+            return
+        features = BaseDetector.extract_features(self, frame, normalized_bbox)
+        learning_rate = float(Parameters.TEMPLATE_APPEARANCE_LEARNING_RATE)
+        learning_rate = min(max(learning_rate, 0.0), 1.0)
+        if self.adaptive_features is None:
+            self.adaptive_features = features.copy()
+        else:
+            self.adaptive_features = (
+                (1.0 - learning_rate) * self.adaptive_features
+                + learning_rate * features
+            )
+        # The immutable initial template protects identity; this trusted recent
+        # view supplies a second appearance/background condition for recovery.
+        self.trusted_template = roi.copy()
+        self.trusted_features = features.copy()
+        logger.debug(
+            "TEMPLATE: Trusted recovery view updated (learning rate %.4f)",
+            learning_rate,
+        )
 
-    def smart_redetection(self, frame: np.ndarray, tracker=None, roi: Optional[Tuple[int, int, int, int]] = None) -> bool:
-        """
-        Performs template matching to re-detect the object, with additional validation.
+    def get_recovery_search_requirements(self) -> RecoverySearchRequirements:
+        templates = self._recovery_templates()
+        if not templates:
+            return super().get_recovery_search_requirements()
+        return RecoverySearchRequirements(
+            min_width=max(template.shape[1] for _, template in templates),
+            min_height=max(template.shape[0] for _, template in templates),
+        )
 
-        Args:
-            frame (np.ndarray): The current video frame.
-            tracker (Optional[object]): The tracker instance.
-            roi (Optional[Tuple[int, int, int, int]]): Region of interest to limit search.
+    def snapshot_identity_state(self) -> Dict[str, Any]:
+        state = super().snapshot_identity_state()
+        for name in ("template", "trusted_template", "trusted_features"):
+            value = getattr(self, name, None)
+            state[name] = value.copy() if isinstance(value, np.ndarray) else value
+        return state
 
-        Returns:
-            bool: True if re-detection is successful, False otherwise.
-        """
+    def restore_identity_state(self, state: Dict[str, Any]) -> None:
+        super().restore_identity_state(state)
+        for name in ("template", "trusted_template", "trusted_features"):
+            value = state.get(name)
+            setattr(
+                self,
+                name,
+                value.copy() if isinstance(value, np.ndarray) else value,
+            )
+
+    def smart_redetection(
+        self,
+        frame: np.ndarray,
+        tracker=None,
+        roi: Optional[Tuple[int, int, int, int]] = None,
+    ) -> bool:
+        """Compatibility adapter for callers that still consume a boolean."""
+        return self.propose_recovery(frame, tracker=tracker, roi=roi).accepted
+
+    def propose_recovery(
+        self,
+        frame: np.ndarray,
+        tracker=None,
+        roi: Optional[Tuple[int, int, int, int]] = None,
+    ) -> RecoveryDetectionResult:
+        """Return a unique appearance-validated candidate without changing identity."""
+        del tracker  # Recovery motion/locality is owned by the shared search plan.
         if self.template is None:
             logger.warning("Template has not been set.")
-            return False
+            return RecoveryDetectionResult(False, "target_template_unavailable")
 
-        frame_to_search = frame
-        x_offset, y_offset = 0, 0
+        prepared_region = self.prepare_recovery_search_region(
+            frame,
+            roi,
+            self.get_recovery_search_requirements(),
+        )
+        if prepared_region is None:
+            logger.warning(
+                "Rejected invalid or undersized re-detection search region: %s",
+                roi,
+            )
+            return RecoveryDetectionResult(False, "invalid_search_region")
+        frame_to_search, x_offset, y_offset = prepared_region
 
-        if roi is not None:
-            x, y, w, h = roi
-            frame_to_search = frame[y:y+h, x:x+w]
-            x_offset, y_offset = x, y
-
-        # Check if frame_to_search is larger than or equal to the template
-        if frame_to_search.shape[0] < self.template.shape[0] or frame_to_search.shape[1] < self.template.shape[1]:
-            logger.warning(f"Frame to search is smaller than template. Frame size: {frame_to_search.shape}, Template size: {self.template.shape}")
-            return False
-
-        # Perform multi-scale template matching
-        match_found, match_result = self.perform_multiscale_template_matching(frame_to_search)
-        if not match_found:
-            logger.debug("TEMPLATE: No matches found during redetection")
-            return False
-
-        # Extract the matched bounding box
-        top_left_x, top_left_y, w, h = match_result
-        # Adjust coordinates based on ROI offset
-        top_left_x += x_offset
-        top_left_y += y_offset
-        self.latest_bbox = (top_left_x, top_left_y, w, h)
-
-        # Validate the match
-        is_valid = self.validate_match(frame, self.latest_bbox)
-        if not is_valid:
-            logger.debug("TEMPLATE: Match validation failed after redetection")
-            return False
-
-        logger.info("TEMPLATE: Validated redetection at %s", self.latest_bbox)
-
-        # Update adaptive features
-        features = super().extract_features(frame, self.latest_bbox)
-        self.adaptive_features = (1 - Parameters.TEMPLATE_APPEARANCE_LEARNING_RATE) * self.adaptive_features + \
-                                 Parameters.TEMPLATE_APPEARANCE_LEARNING_RATE * features
-
-        return True
-
-    def perform_multiscale_template_matching(self, frame_to_search: np.ndarray) -> Tuple[bool, Tuple[int, int, int, int]]:
-        """
-        Performs multi-scale template matching without modifying the original template.
-
-        Args:
-            frame_to_search (np.ndarray): The image to search in.
-
-        Returns:
-            Tuple[bool, Tuple[int, int, int, int]]: (Match found, (top_left_x, top_left_y, w, h))
-        """
-        self.latest_match_score = None
-        scales = Parameters.TEMPLATE_MATCHING_SCALES
-        best_match_value = None
-        best_top_left = None
-        best_scale = 1.0
-
-        for scale in scales:
-            resized_template = cv2.resize(self.template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            if frame_to_search.shape[0] < resized_template.shape[0] or frame_to_search.shape[1] < resized_template.shape[1]:
+        matches = self._find_template_match_candidates(frame_to_search)
+        validated: List[RecoveryCandidate] = []
+        appearance_threshold = self._finite_unit_parameter(
+            getattr(Parameters, "APPEARANCE_CONFIDENCE_THRESHOLD", 0.7),
+            fallback=0.7,
+        )
+        for match in matches:
+            x, y, width, height = match.bbox
+            bbox = (x + x_offset, y + y_offset, width, height)
+            appearance_confidence = self._appearance_confidence(frame, bbox)
+            if appearance_confidence + 1e-6 < appearance_threshold:
                 continue
-
-            res = cv2.matchTemplate(frame_to_search, resized_template, self.method)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-
-            if self.method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-                match_value = min_val
-                top_left = min_loc
-                is_better = best_match_value is None or match_value < best_match_value
-            else:
-                match_value = max_val
-                top_left = max_loc
-                is_better = best_match_value is None or match_value > best_match_value
-
-            if is_better:
-                best_match_value = match_value
-                best_top_left = top_left
-                best_scale = scale
-
-        if best_match_value is not None:
-            if not np.isfinite(best_match_value):
-                logger.error("Template matching produced a non-finite score")
-                return False, (0, 0, 0, 0)
-            self.latest_match_score = float(best_match_value)
-            try:
-                threshold = float(Parameters.TEMPLATE_MATCHING_THRESHOLD)
-            except (TypeError, ValueError):
-                logger.error("Template matching threshold is not numeric")
-                return False, (0, 0, 0, 0)
-            if not np.isfinite(threshold):
-                logger.error("Template matching threshold is not finite")
-                return False, (0, 0, 0, 0)
-
-            score_epsilon = 1e-6
-            if self.method == cv2.TM_SQDIFF_NORMED:
-                score_accepted = best_match_value <= (
-                    1.0 - np.clip(threshold, 0.0, 1.0) + score_epsilon
+            association_confidence = math.sqrt(
+                max(0.0, match.match_confidence)
+                * max(0.0, appearance_confidence)
+            )
+            validated.append(
+                RecoveryCandidate(
+                    bbox=bbox,
+                    visual_confidence=match.match_confidence,
+                    appearance_confidence=appearance_confidence,
+                    association_confidence=association_confidence,
+                    source=match.template_source,
+                    raw_score=match.raw_score,
                 )
-            elif self.method == cv2.TM_SQDIFF:
-                score_accepted = best_match_value <= threshold + score_epsilon
-            else:
-                score_accepted = best_match_value + score_epsilon >= threshold
+            )
 
-            if not score_accepted:
-                logger.debug(
-                    "Best template match rejected: score=%.4f threshold=%.4f method=%s",
-                    best_match_value,
-                    threshold,
-                    Parameters.TEMPLATE_MATCHING_METHOD,
-                )
-                return False, (0, 0, 0, 0)
+        validated.sort(
+            key=lambda candidate: (
+                candidate.association_confidence,
+                candidate.visual_confidence,
+                candidate.appearance_confidence,
+            ),
+            reverse=True,
+        )
+        if not validated:
+            logger.debug("TEMPLATE: No appearance-validated recovery candidates")
+            return RecoveryDetectionResult(False, "no_validated_candidate")
 
-            logger.debug(f"Best match found at scale {best_scale} with value {best_match_value}")
-            # Adjust the bounding box size based on the best scale
-            h_tmpl, w_tmpl = self.template.shape[:2]
-            h_resized, w_resized = int(h_tmpl * best_scale), int(w_tmpl * best_scale)
-            return True, (best_top_left[0], best_top_left[1], w_resized, h_resized)
-        else:
+        best = validated[0]
+        runner_up = validated[1] if len(validated) > 1 else None
+        confidence_margin = (
+            best.association_confidence - runner_up.association_confidence
+            if runner_up is not None
+            else None
+        )
+        minimum_margin = self._finite_unit_parameter(
+            getattr(Parameters, "REDETECTION_MIN_CONFIDENCE_MARGIN", 0.05),
+            fallback=0.05,
+        )
+        if (
+            runner_up is not None
+            and confidence_margin is not None
+            and confidence_margin + 1e-6 < minimum_margin
+        ):
+            logger.warning(
+                "TEMPLATE: Recovery remains ambiguous across %d candidates "
+                "(best=%.3f, runner-up=%.3f, required margin=%.3f)",
+                len(validated),
+                best.association_confidence,
+                runner_up.association_confidence,
+                minimum_margin,
+            )
+            return RecoveryDetectionResult(
+                accepted=False,
+                reason="ambiguous_candidates",
+                candidate_count=len(validated),
+                ambiguous=True,
+                runner_up_confidence=runner_up.association_confidence,
+                confidence_margin=confidence_margin,
+            )
+
+        self.latest_bbox = best.bbox
+        self.latest_match_score = best.raw_score
+        self.latest_template_source = best.source
+        logger.info(
+            "TEMPLATE: Validated unique %s-template recovery at %s "
+            "(identity=%.3f, candidates=%d)",
+            best.source,
+            best.bbox,
+            best.association_confidence,
+            len(validated),
+        )
+        return RecoveryDetectionResult(
+            accepted=True,
+            reason="unique_validated_candidate",
+            candidate=best,
+            candidate_count=len(validated),
+            runner_up_confidence=(
+                runner_up.association_confidence if runner_up is not None else None
+            ),
+            confidence_margin=confidence_margin,
+        )
+
+    def _recovery_templates(self) -> List[Tuple[str, np.ndarray]]:
+        """Return immutable and trusted recent views without duplicate work."""
+        templates: List[Tuple[str, np.ndarray]] = []
+        initial = self.initial_template if self.initial_template is not None else self.template
+        if isinstance(initial, np.ndarray) and initial.size:
+            templates.append(("initial", initial))
+        trusted = self.trusted_template
+        if isinstance(trusted, np.ndarray) and trusted.size:
+            if not templates or not np.array_equal(templates[0][1], trusted):
+                templates.append(("trusted", trusted))
+        return templates
+
+    def perform_multiscale_template_matching(
+        self,
+        frame_to_search: np.ndarray,
+    ) -> Tuple[bool, Tuple[int, int, int, int]]:
+        """Compatibility view of the highest normalized candidate."""
+        self.latest_match_score = None
+        self.latest_template_source = None
+        candidates = self._find_template_match_candidates(frame_to_search)
+        if not candidates:
             return False, (0, 0, 0, 0)
+        best = candidates[0]
+        self.latest_match_score = best.raw_score
+        self.latest_template_source = best.template_source
+        return True, best.bbox
+
+    @staticmethod
+    def _finite_unit_parameter(value: object, *, fallback: float) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = fallback
+        if not np.isfinite(parsed):
+            parsed = fallback
+        return float(np.clip(parsed, 0.0, 1.0))
+
+    @staticmethod
+    def _candidate_limit() -> int:
+        try:
+            return max(
+                1,
+                min(50, int(Parameters.REDETECTION_MAX_CANDIDATES)),
+            )
+        except (AttributeError, TypeError, ValueError):
+            return 5
+
+    @staticmethod
+    def _normalized_method(method: int) -> int:
+        return {
+            cv2.TM_CCOEFF: cv2.TM_CCOEFF_NORMED,
+            cv2.TM_CCORR: cv2.TM_CCORR_NORMED,
+            cv2.TM_SQDIFF: cv2.TM_SQDIFF_NORMED,
+        }.get(method, method)
+
+    @staticmethod
+    def _confidence_response(response: np.ndarray, method: int) -> np.ndarray:
+        finite = np.asarray(response, dtype=np.float32)
+        if method in (cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED):
+            return 1.0 - np.clip(finite, 0.0, 1.0)
+        return np.clip(finite, 0.0, 1.0)
+
+    def _score_is_accepted(self, raw_score: float) -> bool:
+        if not np.isfinite(raw_score):
+            return False
+        try:
+            threshold = float(Parameters.TEMPLATE_MATCHING_THRESHOLD)
+        except (TypeError, ValueError):
+            logger.error("Template matching threshold is not numeric")
+            return False
+        if not np.isfinite(threshold):
+            logger.error("Template matching threshold is not finite")
+            return False
+        if self.method == cv2.TM_SQDIFF_NORMED:
+            return raw_score <= 1.0 - np.clip(threshold, 0.0, 1.0) + 1e-6
+        if self.method == cv2.TM_SQDIFF:
+            return raw_score <= threshold + 1e-6
+        return raw_score + 1e-6 >= threshold
+
+    @staticmethod
+    def _bbox_iou(
+        first: Tuple[int, int, int, int],
+        second: Tuple[int, int, int, int],
+    ) -> float:
+        first_x, first_y, first_width, first_height = first
+        second_x, second_y, second_width, second_height = second
+        intersection_width = max(
+            0,
+            min(first_x + first_width, second_x + second_width)
+            - max(first_x, second_x),
+        )
+        intersection_height = max(
+            0,
+            min(first_y + first_height, second_y + second_height)
+            - max(first_y, second_y),
+        )
+        intersection = intersection_width * intersection_height
+        if intersection <= 0:
+            return 0.0
+        union = (
+            first_width * first_height
+            + second_width * second_height
+            - intersection
+        )
+        return float(intersection / union) if union > 0 else 0.0
+
+    def _response_candidates(
+        self,
+        raw_response: np.ndarray,
+        confidence_response: np.ndarray,
+        *,
+        template_size: Tuple[int, int],
+        template_source: str,
+    ) -> List[_TemplateMatchCandidate]:
+        """Extract bounded spatial peaks from one template/scale response."""
+        width, height = template_size
+        working = np.asarray(confidence_response, dtype=np.float32).copy()
+        working[~np.isfinite(working)] = -np.inf
+        candidates: List[_TemplateMatchCandidate] = []
+        limit = self._candidate_limit()
+        inspected = 0
+        inspection_limit = max(limit, limit * 4)
+
+        while working.size and inspected < inspection_limit:
+            _, confidence, _, location = cv2.minMaxLoc(working)
+            if not np.isfinite(confidence):
+                break
+            x, y = location
+            raw_score = float(raw_response[y, x])
+            if self._score_is_accepted(raw_score):
+                candidates.append(
+                    _TemplateMatchCandidate(
+                        bbox=(x, y, width, height),
+                        match_confidence=float(np.clip(confidence, 0.0, 1.0)),
+                        raw_score=raw_score,
+                        template_source=template_source,
+                    )
+                )
+                if len(candidates) >= limit:
+                    break
+
+            inspected += 1
+            x_radius = max(1, width // 2)
+            y_radius = max(1, height // 2)
+            x_start = max(0, x - x_radius)
+            x_end = min(working.shape[1], x + x_radius + 1)
+            y_start = max(0, y - y_radius)
+            y_end = min(working.shape[0], y + y_radius + 1)
+            working[y_start:y_end, x_start:x_end] = -np.inf
+
+        return candidates
+
+    def _deduplicate_candidates(
+        self,
+        candidates: List[_TemplateMatchCandidate],
+    ) -> List[_TemplateMatchCandidate]:
+        threshold = self._finite_unit_parameter(
+            getattr(Parameters, "REDETECTION_CANDIDATE_NMS_IOU", 0.3),
+            fallback=0.3,
+        )
+        candidates.sort(
+            key=lambda candidate: candidate.match_confidence,
+            reverse=True,
+        )
+        selected: List[_TemplateMatchCandidate] = []
+        for candidate in candidates:
+            duplicate = False
+            for existing in selected:
+                overlap = self._bbox_iou(candidate.bbox, existing.bbox)
+                if overlap > 0.0 and overlap >= threshold:
+                    duplicate = True
+                    break
+            if duplicate:
+                continue
+            selected.append(candidate)
+            if len(selected) >= self._candidate_limit():
+                break
+        return selected
+
+    def _find_template_match_candidates(
+        self,
+        frame_to_search: np.ndarray,
+    ) -> List[_TemplateMatchCandidate]:
+        candidates: List[_TemplateMatchCandidate] = []
+        normalized_method = self._normalized_method(self.method)
+        best_observed_confidence = -math.inf
+        best_observed_score: Optional[float] = None
+        best_observed_source: Optional[str] = None
+
+        for template_source, template in self._recovery_templates():
+            for scale in Parameters.TEMPLATE_MATCHING_SCALES:
+                try:
+                    scale_value = float(scale)
+                except (TypeError, ValueError):
+                    continue
+                if not np.isfinite(scale_value) or scale_value <= 0.0:
+                    continue
+                interpolation = (
+                    cv2.INTER_AREA if scale_value <= 1.0 else cv2.INTER_LINEAR
+                )
+                resized_template = cv2.resize(
+                    template,
+                    None,
+                    fx=scale_value,
+                    fy=scale_value,
+                    interpolation=interpolation,
+                )
+                if (
+                    resized_template.size == 0
+                    or frame_to_search.shape[0] < resized_template.shape[0]
+                    or frame_to_search.shape[1] < resized_template.shape[1]
+                ):
+                    continue
+
+                raw_response = cv2.matchTemplate(
+                    frame_to_search,
+                    resized_template,
+                    self.method,
+                )
+                if normalized_method == self.method:
+                    normalized_response = raw_response
+                else:
+                    normalized_response = cv2.matchTemplate(
+                        frame_to_search,
+                        resized_template,
+                        normalized_method,
+                    )
+                confidence_response = self._confidence_response(
+                    normalized_response,
+                    normalized_method,
+                )
+                _, observed_confidence, _, observed_location = cv2.minMaxLoc(
+                    confidence_response
+                )
+                if (
+                    np.isfinite(observed_confidence)
+                    and observed_confidence > best_observed_confidence
+                ):
+                    observed_x, observed_y = observed_location
+                    best_observed_confidence = float(observed_confidence)
+                    best_observed_score = float(
+                        raw_response[observed_y, observed_x]
+                    )
+                    best_observed_source = template_source
+                candidates.extend(
+                    self._response_candidates(
+                        raw_response,
+                        confidence_response,
+                        template_size=(
+                            int(resized_template.shape[1]),
+                            int(resized_template.shape[0]),
+                        ),
+                        template_source=template_source,
+                    )
+                )
+
+        self.latest_match_score = best_observed_score
+        self.latest_template_source = best_observed_source
+        return self._deduplicate_candidates(candidates)
 
     def validate_match(self, frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> bool:
         """
@@ -256,10 +577,40 @@ class TemplateMatchingDetector(BaseDetector):
         Returns:
             bool: True if the match is valid, False otherwise.
         """
-        current_features = self.extract_features(frame, bbox)
-        confidence = self.compute_appearance_confidence(current_features, self.initial_features)
-        logger.debug(f"Appearance confidence: {confidence:.2f}")
+        confidence = self._appearance_confidence(frame, bbox)
+        logger.debug("Appearance confidence: %.2f", confidence)
         return confidence >= Parameters.APPEARANCE_CONFIDENCE_THRESHOLD
+
+    def _appearance_confidence(
+        self,
+        frame: np.ndarray,
+        bbox: Tuple[int, int, int, int],
+    ) -> float:
+        """Return the strongest bounded immutable/trusted appearance score."""
+        current_features = BaseDetector.extract_features(self, frame, bbox)
+        confidences = []
+        if self.initial_features is not None:
+            confidences.append(
+                self.compute_appearance_confidence(
+                    current_features,
+                    self.initial_features,
+                )
+            )
+        if self.adaptive_features is not None:
+            confidences.append(
+                self.compute_appearance_confidence(
+                    current_features,
+                    self.adaptive_features,
+                )
+            )
+        if self.trusted_features is not None:
+            confidences.append(
+                self.compute_appearance_confidence(
+                    current_features,
+                    self.trusted_features,
+                )
+            )
+        return max(confidences, default=0.0)
 
     def compute_appearance_confidence(self, features: np.ndarray, reference_features: np.ndarray) -> float:
         """

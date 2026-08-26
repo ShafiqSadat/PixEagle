@@ -6166,44 +6166,79 @@ sections:
       AUTO_REDETECT:
         type: boolean
         default: true
-        description: AUTO_REDETECT parameter
+        description: Enable bounded detector-assisted recovery for classic visual trackers
         reload_tier: tracker_restart
         reboot_required: false
       REDETECTION_SEARCH_RADIUS:
         type: integer
         default: 300
-        description: Pixels
+        description: Maximum radius reached by expanding local recovery searches
         reload_tier: tracker_restart
         reboot_required: false
-        min: 0
+        min: 1
         max: 10000
         unit: px
       MIN_SEARCH_RADIUS:
         type: integer
         default: 50
-        description: MIN_SEARCH_RADIUS parameter
+        description: Minimum radius for a local recovery search
         reload_tier: tracker_restart
         reboot_required: false
-        min: 0
-        max: 1000
+        min: 1
+        max: 10000
+        unit: px
       UNCERTAINTY_SCALE_FACTOR:
         type: float
         default: 2.0
-        description: UNCERTAINTY_SCALE_FACTOR parameter
+        description: Target-extent multiplier used to size the first local recovery search
         reload_tier: tracker_restart
         reboot_required: false
         min: 0.0
-        max: 100.0
+        max: 20.0
         step: 0.1
       ESTIMATOR_UNCERTAINTY_THRESHOLD:
         type: float
         default: 1000.0
-        description: ==============================================================================
+        description: Maximum estimator covariance trace accepted for local search guidance
         reload_tier: tracker_restart
         reboot_required: false
-        min: -10000.0
-        max: 10000.0
-        step: 0.1
+        min: 0.0
+        max: 1000000000.0
+        step: 1.0
+      REDETECTION_GLOBAL_SEARCH_ATTEMPTS:
+        type: integer
+        default: 2
+        description: Final recovery attempts reserved for full-frame search
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      REDETECTION_MAX_CANDIDATES:
+        type: integer
+        default: 5
+        description: Maximum spatially distinct recovery candidates evaluated per attempt
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1
+        max: 50
+      REDETECTION_CANDIDATE_NMS_IOU:
+        type: float
+        default: 0.3
+        description: IoU threshold for merging duplicate multi-scale recovery proposals
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      REDETECTION_MIN_CONFIDENCE_MARGIN:
+        type: float
+        default: 0.05
+        description: Minimum identity-score lead required over a similar recovery candidate
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
     additional_properties: false
   GStreamerPipelines:
     display_name: GStreamer Pipelines

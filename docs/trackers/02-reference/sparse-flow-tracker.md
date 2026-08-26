@@ -47,6 +47,11 @@ shared PixEagle lifecycle then owns estimator prediction and bounded
 detector-assisted recovery. There is no second tracker-local Kalman filter,
 detector loop, or follower policy.
 
+That shared recovery clips out-of-frame predictions, expands target-relative
+local searches, and uses final full-frame attempts. It also preserves the
+operator-selected detector identity when a candidate reinitializes SparseFlow.
+See [Classic tracker recovery](../01-architecture/classic-recovery.md).
+
 On the first rejected frame:
 
 - the last confirmed box may remain visible for diagnostics;

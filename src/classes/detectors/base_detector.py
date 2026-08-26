@@ -3,8 +3,13 @@
 import cv2
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional
+from typing import Any, Dict, Tuple, Optional
 from classes.parameters import Parameters  # Ensure Parameters is correctly imported
+from classes.tracking_recovery import (
+    RecoveryCandidate,
+    RecoveryDetectionResult,
+    RecoverySearchRequirements,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -89,6 +94,81 @@ class BaseDetector(ABC):
         self.initial_template = roi.copy()
         return features
 
+    def get_recovery_search_requirements(self) -> RecoverySearchRequirements:
+        """Describe the minimum search image this detector can evaluate."""
+        if self.initial_template is None or self.initial_template.size == 0:
+            return RecoverySearchRequirements()
+        height, width = self.initial_template.shape[:2]
+        return RecoverySearchRequirements(
+            min_width=max(1, int(width)),
+            min_height=max(1, int(height)),
+        )
+
+    @staticmethod
+    def prepare_recovery_search_region(
+        frame: np.ndarray,
+        roi: Optional[Tuple[int, int, int, int]],
+        requirements: RecoverySearchRequirements,
+    ) -> Optional[Tuple[np.ndarray, int, int]]:
+        """Clip and validate a detector ROI before image slicing."""
+        if (
+            not isinstance(frame, np.ndarray)
+            or frame.ndim < 2
+            or frame.size == 0
+        ):
+            return None
+        if roi is None:
+            region = frame
+            x_offset = 0
+            y_offset = 0
+        else:
+            try:
+                x, y, width, height = (int(value) for value in roi)
+            except (TypeError, ValueError):
+                return None
+            if width <= 0 or height <= 0:
+                return None
+            frame_height, frame_width = frame.shape[:2]
+            x_min = min(max(0, x), frame_width)
+            y_min = min(max(0, y), frame_height)
+            x_max = min(max(0, x + width), frame_width)
+            y_max = min(max(0, y + height), frame_height)
+            if x_max <= x_min or y_max <= y_min:
+                return None
+            region = frame[y_min:y_max, x_min:x_max]
+            x_offset = x_min
+            y_offset = y_min
+
+        try:
+            required_width = max(1, int(requirements.min_width))
+            required_height = max(1, int(requirements.min_height))
+        except (TypeError, ValueError):
+            return None
+        if (
+            region.shape[1] < required_width
+            or region.shape[0] < required_height
+        ):
+            return None
+        return region, x_offset, y_offset
+
+    def snapshot_identity_state(self) -> Dict[str, Any]:
+        """Copy detector identity so tracker reinitialization cannot replace it."""
+        state: Dict[str, Any] = {}
+        for name in ("initial_features", "adaptive_features", "initial_template"):
+            value = getattr(self, name, None)
+            state[name] = value.copy() if isinstance(value, np.ndarray) else value
+        return state
+
+    def restore_identity_state(self, state: Dict[str, Any]) -> None:
+        """Restore a state produced by :meth:`snapshot_identity_state`."""
+        for name in ("initial_features", "adaptive_features", "initial_template"):
+            value = state.get(name)
+            setattr(
+                self,
+                name,
+                value.copy() if isinstance(value, np.ndarray) else value,
+            )
+
     def compute_appearance_confidence(self, current_features: np.ndarray, adaptive_features: np.ndarray) -> float:
         """
         Computes confidence based on appearance consistency.
@@ -156,6 +236,55 @@ class BaseDetector(ABC):
             Parameters.PF_CANNY_THRESHOLD2,
         )
         return edges
+
+    def propose_recovery(
+        self,
+        frame: np.ndarray,
+        tracker=None,
+        roi: Optional[Tuple[int, int, int, int]] = None,
+    ) -> RecoveryDetectionResult:
+        """Adapt the legacy boolean detector contract to one typed proposal.
+
+        Detectors that can reason about multiple candidates should override this
+        method. Existing detector plugins remain compatible, but their single
+        result cannot provide distractor-ambiguity evidence.
+        """
+        if not self.smart_redetection(frame, tracker=tracker, roi=roi):
+            return RecoveryDetectionResult(
+                accepted=False,
+                reason="no_validated_candidate",
+            )
+        bbox = self.get_latest_bbox()
+        if bbox is None:
+            return RecoveryDetectionResult(
+                accepted=False,
+                reason="detector_candidate_missing_bbox",
+            )
+        try:
+            normalized_bbox = tuple(int(value) for value in bbox)
+        except (TypeError, ValueError):
+            return RecoveryDetectionResult(
+                accepted=False,
+                reason="detector_candidate_invalid_bbox",
+            )
+        if len(normalized_bbox) != 4:
+            return RecoveryDetectionResult(
+                accepted=False,
+                reason="detector_candidate_invalid_bbox",
+            )
+        candidate = RecoveryCandidate(
+            bbox=normalized_bbox,
+            visual_confidence=1.0,
+            appearance_confidence=1.0,
+            association_confidence=1.0,
+            source="legacy_single_candidate",
+        )
+        return RecoveryDetectionResult(
+            accepted=True,
+            reason="legacy_single_candidate",
+            candidate=candidate,
+            candidate_count=1,
+        )
 
     @abstractmethod
     def smart_redetection(self, frame: np.ndarray, tracker=None, roi: Optional[Tuple[int, int, int, int]] = None) -> bool:

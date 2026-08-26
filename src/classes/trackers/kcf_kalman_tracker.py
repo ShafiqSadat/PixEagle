@@ -328,6 +328,20 @@ class KCFKalmanTracker(BaseTracker):
             return (float(self.kf.x[0]), float(self.kf.x[1]))
         return None
 
+    def is_recovery_prediction_reliable(self) -> bool:
+        """Validate KCF's internal prediction using position covariance."""
+        estimate = self.get_estimated_position()
+        if estimate is None or self.kf is None:
+            return False
+        if not all(np.isfinite(value) for value in estimate):
+            return False
+        position_uncertainty = float(np.trace(self.kf.P[:2, :2]))
+        try:
+            threshold = float(Parameters.ESTIMATOR_UNCERTAINTY_THRESHOLD)
+        except (TypeError, ValueError):
+            return False
+        return np.isfinite(position_uncertainty) and position_uncertainty < threshold
+
     def reset(self) -> None:
         self.kcf_tracker = None
         self.kf = None

@@ -600,7 +600,11 @@ async def test_failed_redetection_result_does_not_reset_original_loss_deadline()
 
     assert ctrl.tracking_failure_start_time == original_deadline_start
     assert ctrl._tracking_recovery_attempts == 1
-    ctrl.handle_tracking_failure.assert_called_once_with(frame)
+    ctrl.handle_tracking_failure.assert_called_once_with(
+        frame,
+        attempt=1,
+        max_attempts=5,
+    )
     ctrl.tracker.stop_tracking.assert_not_called()
 
 
@@ -732,6 +736,212 @@ def test_failed_redetection_initializer_rolls_back_without_raising():
     }
     assert controller.tracking_started is True
     controller.tracker.stop_tracking.assert_called_once_with()
+
+
+def test_successful_redetection_preserves_original_detector_identity():
+    from classes.detectors.template_matching_detector import (
+        TemplateMatchingDetector,
+    )
+    from classes.tracking_recovery import (
+        RecoveryCandidate,
+        RecoveryDetectionResult,
+        RecoveryHint,
+    )
+
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    frame[10:30, 10:40] = (0, 0, 255)
+    frame[40:60, 100:130] = (0, 255, 0)
+    detector = TemplateMatchingDetector()
+    detector.initialize_target(frame, (10, 10, 30, 20))
+    original_identity = detector.initial_template.copy()
+    detector.set_latest_bbox((100, 40, 30, 20))
+    detector.propose_recovery = MagicMock(
+        return_value=RecoveryDetectionResult(
+            accepted=True,
+            reason="unique_validated_candidate",
+            candidate=RecoveryCandidate(
+                bbox=(100, 40, 30, 20),
+                visual_confidence=0.95,
+                appearance_confidence=0.95,
+                association_confidence=0.95,
+                source="initial",
+            ),
+            candidate_count=1,
+        )
+    )
+
+    controller = object.__new__(AppController)
+    controller.smart_mode_active = False
+    controller.tracking_started = True
+    controller._follower_state_lock = asyncio.Lock()
+    controller._tracker_model_state_lock = threading.RLock()
+    controller.detector = detector
+
+    def initialize_candidate(recovery_frame, bbox):
+        detector.initialize_target(recovery_frame, bbox)
+
+    controller.tracker = SimpleNamespace(
+        get_recovery_hint=MagicMock(
+            return_value=RecoveryHint(
+                predicted_center=(115.0, 50.0),
+                last_seen_bbox=(10, 10, 30, 20),
+                prediction_reliable=True,
+            )
+        ),
+        reinitialize_tracker=MagicMock(side_effect=initialize_candidate),
+        stop_tracking=MagicMock(),
+    )
+
+    with patch('classes.app_controller.Parameters.USE_DETECTOR', True):
+        result = controller.initiate_redetection(
+            frame=frame,
+            attempt=5,
+            max_attempts=5,
+        )
+
+    assert result["success"] is True
+    assert result["search_scope"] == "global"
+    assert np.array_equal(detector.initial_template, original_identity)
+    assert np.array_equal(detector.template, original_identity)
+    assert np.array_equal(detector.trusted_template, original_identity)
+    assert detector.get_latest_bbox() == (100, 40, 30, 20)
+
+
+def test_ambiguous_recovery_never_reinitializes_tracker_target():
+    from classes.tracking_recovery import (
+        RecoveryDetectionResult,
+        RecoveryHint,
+    )
+
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    controller = object.__new__(AppController)
+    controller.smart_mode_active = False
+    controller.tracking_started = True
+    controller._follower_state_lock = asyncio.Lock()
+    controller._tracker_model_state_lock = threading.RLock()
+    controller.detector = SimpleNamespace(
+        propose_recovery=MagicMock(
+            return_value=RecoveryDetectionResult(
+                accepted=False,
+                reason="ambiguous_candidates",
+                candidate_count=2,
+                ambiguous=True,
+                runner_up_confidence=0.93,
+                confidence_margin=0.01,
+            )
+        )
+    )
+    controller.tracker = SimpleNamespace(
+        get_recovery_hint=MagicMock(
+            return_value=RecoveryHint(
+                predicted_center=(100.0, 50.0),
+                last_seen_bbox=(85, 40, 30, 20),
+                prediction_reliable=True,
+            )
+        ),
+        reinitialize_tracker=MagicMock(),
+        stop_tracking=MagicMock(),
+    )
+
+    with patch('classes.app_controller.Parameters.USE_DETECTOR', True):
+        result = controller.initiate_redetection(
+            frame=frame,
+            attempt=5,
+            max_attempts=5,
+        )
+
+    assert result == {
+        "success": False,
+        "message": (
+            "Re-detection found similar candidates but could not confirm a "
+            "unique target."
+        ),
+        "search_scope": "global",
+        "recovery_reason": "ambiguous_candidates",
+        "candidate_count": 2,
+        "ambiguous": True,
+    }
+    controller.tracker.reinitialize_tracker.assert_not_called()
+    controller.tracker.stop_tracking.assert_not_called()
+
+
+def test_shared_recovery_reacquires_far_reentry_on_global_attempt():
+    from classes.detectors.template_matching_detector import (
+        TemplateMatchingDetector,
+    )
+    from classes.tracking_recovery import RecoveryHint
+
+    rng = np.random.default_rng(42)
+    target = rng.integers(0, 256, size=(16, 20, 3), dtype=np.uint8)
+    initial_frame = np.zeros((120, 200, 3), dtype=np.uint8)
+    initial_frame[50:66, 80:100] = target
+    reentry_frame = np.zeros_like(initial_frame)
+    reentry_frame[80:96, 10:30] = target
+
+    detector = TemplateMatchingDetector()
+    detector.initialize_target(initial_frame, (80, 50, 20, 16))
+    original_identity = detector.initial_template.copy()
+
+    controller = object.__new__(AppController)
+    controller.smart_mode_active = False
+    controller.tracking_started = True
+    controller._follower_state_lock = asyncio.Lock()
+    controller._tracker_model_state_lock = threading.RLock()
+    controller.detector = detector
+
+    def initialize_candidate(recovery_frame, bbox):
+        detector.initialize_target(recovery_frame, bbox)
+
+    controller.tracker = SimpleNamespace(
+        get_recovery_hint=MagicMock(
+            return_value=RecoveryHint(
+                predicted_center=(500.0, 10.0),
+                last_seen_bbox=(170, 10, 20, 16),
+                prediction_reliable=True,
+                exit_edge="right",
+            )
+        ),
+        reinitialize_tracker=MagicMock(side_effect=initialize_candidate),
+        stop_tracking=MagicMock(),
+    )
+
+    with (
+        patch('classes.app_controller.Parameters.USE_DETECTOR', True),
+        patch(
+            'classes.app_controller.Parameters.REDETECTION_GLOBAL_SEARCH_ATTEMPTS',
+            2,
+            create=True,
+        ),
+        patch(
+            'classes.detectors.template_matching_detector.Parameters.TEMPLATE_MATCHING_SCALES',
+            [1.0],
+        ),
+        patch(
+            'classes.detectors.template_matching_detector.Parameters.TEMPLATE_MATCHING_THRESHOLD',
+            0.99,
+        ),
+        patch(
+            'classes.detectors.template_matching_detector.Parameters.APPEARANCE_CONFIDENCE_THRESHOLD',
+            0.99,
+        ),
+    ):
+        local_result = controller.initiate_redetection(
+            frame=reentry_frame,
+            attempt=1,
+            max_attempts=5,
+        )
+        global_result = controller.initiate_redetection(
+            frame=reentry_frame,
+            attempt=4,
+            max_attempts=5,
+        )
+
+    assert local_result["success"] is False
+    assert local_result["search_scope"] == "local"
+    assert global_result["success"] is True
+    assert global_result["search_scope"] == "global"
+    assert global_result["bounding_box"] == (10, 80, 20, 16)
+    assert np.array_equal(detector.initial_template, original_identity)
 
 
 def test_classic_tracker_update_requires_explicit_fresh_measurement_metadata():

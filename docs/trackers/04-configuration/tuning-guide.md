@@ -184,13 +184,25 @@ Tracking:
 
 Detector:
   AUTO_REDETECT: true
+  MIN_SEARCH_RADIUS: 50
+  REDETECTION_SEARCH_RADIUS: 300
+  UNCERTAINTY_SCALE_FACTOR: 2.0
+  REDETECTION_GLOBAL_SEARCH_ATTEMPTS: 2
+  REDETECTION_MAX_CANDIDATES: 5
+  REDETECTION_CANDIDATE_NMS_IOU: 0.3
+  REDETECTION_MIN_CONFIDENCE_MARGIN: 0.05
 ```
 
 Within that bounded window, the estimator can guide diagnostics and the
-detector can propose reinitialization candidates. Following remains fail-closed
-until a fresh measured tracker output passes its contract. Increasing timeout
-or attempts can improve opportunity for recovery but also increases compute
-and false-match exposure.
+detector can propose reinitialization candidates. Search begins near a reliable
+prediction or last confirmed box, expands by target size, and reserves the
+final attempts for full-frame recovery. Following remains fail-closed until a
+fresh measured tracker output passes its contract. Increasing area, timeout, or
+attempts can improve recovery opportunity but also increases compute and
+false-match exposure. Spatial NMS merges duplicate multi-scale proposals; when
+two validated lookalikes fall inside the minimum identity-score margin, no
+candidate is accepted. See
+[Classic tracker recovery](../01-architecture/classic-recovery.md).
 
 ## Hardware Acceptance
 
