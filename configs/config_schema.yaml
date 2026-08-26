@@ -1122,6 +1122,9 @@ sections:
         - value: KCF
           label: KCF + Kalman
           description: Fast tracking with state estimation
+        - value: SparseFlow
+          label: Sparse Flow
+          description: Fast validated point-flow tracking
         - value: Gimbal
           label: Gimbal Tracker
           description: External gimbal angle tracker
@@ -1588,6 +1591,331 @@ sections:
         reboot_required: false
         min: 0
         max: 100
+    additional_properties: false
+  SparseFlow_Tracker:
+    display_name: Sparse Flow Tracker
+    category: tracking
+    icon: track_changes
+    parameters:
+      feature_strategy:
+        type: string
+        default: auto
+        description: auto, gftt, grid
+        reload_tier: tracker_restart
+        reboot_required: false
+        options:
+        - value: auto
+          label: Auto
+          description: Prefer corner features and fill sparse regions with a grid
+        - value: gftt
+          label: Corners
+          description: Use Shi-Tomasi corner features only
+        - value: grid
+          label: Grid
+          description: Use evenly spaced target points only
+      max_points:
+        type: integer
+        default: 100
+        description: Maximum target points maintained
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 4
+        max: 2000
+      min_points:
+        type: integer
+        default: 8
+        description: Minimum consistent points for a measurement
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 3
+        max: 2000
+      quality_level:
+        type: float
+        default: 0.01
+        description: Shi-Tomasi quality fraction
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1.0e-06
+        max: 1.0
+        step: 0.001
+      min_distance_ratio:
+        type: float
+        default: 0.035
+        description: Point spacing as target-diagonal fraction
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      roi_inset_ratio:
+        type: float
+        default: 0.06
+        description: Avoid unstable points on the ROI edge
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 0.45
+        step: 0.01
+      lk_window_size:
+        type: integer
+        default: 21
+        description: Odd Lucas-Kanade window size in pixels
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 5
+        max: 101
+        unit: px
+        step: 2
+      lk_max_level:
+        type: integer
+        default: 3
+        description: Optical-flow pyramid depth
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 8
+      lk_max_iterations:
+        type: integer
+        default: 30
+        description: Solver iteration limit per pyramid level
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1
+        max: 200
+      lk_epsilon:
+        type: float
+        default: 0.01
+        description: Solver convergence threshold
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1.0e-06
+        max: 1.0
+        step: 0.001
+      fb_error_ratio:
+        type: float
+        default: 0.025
+        description: Forward/backward limit relative to target diagonal
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      fb_error_min_px:
+        type: float
+        default: 0.75
+        description: Lower pixel bound for small targets
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 100.0
+        step: 0.1
+        unit: px
+      fb_error_max_px:
+        type: float
+        default: 10.0
+        description: Upper pixel bound for large targets
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 500.0
+        step: 0.5
+        unit: px
+      ransac_reproj_ratio:
+        type: float
+        default: 0.03
+        description: Geometry residual relative to target diagonal
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      ransac_reproj_min_px:
+        type: float
+        default: 1.0
+        description: Lower geometry residual bound in pixels
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.01
+        max: 100.0
+        step: 0.1
+        unit: px
+      ransac_reproj_max_px:
+        type: float
+        default: 12.0
+        description: Upper geometry residual bound in pixels
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.01
+        max: 500.0
+        step: 0.5
+        unit: px
+      ransac_max_iterations:
+        type: integer
+        default: 1000
+        description: Robust transform iteration limit
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1
+        max: 10000
+      ransac_confidence:
+        type: float
+        default: 0.99
+        description: Requested transform confidence
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.5
+        max: 0.999999
+        step: 0.001
+      ransac_refine_iterations:
+        type: integer
+        default: 10
+        description: Inlier-only transform refinement iterations
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      min_inlier_ratio:
+        type: float
+        default: 0.55
+        description: Minimum robust geometry consensus
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      max_scale_change_per_frame:
+        type: float
+        default: 0.35
+        description: Maximum accepted scale delta per frame
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 2.0
+        step: 0.01
+      max_rotation_degrees_per_frame:
+        type: float
+        default: 35.0
+        description: Maximum accepted image-plane rotation per frame
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 180.0
+        step: 1.0
+        unit: deg
+      min_appearance_confidence:
+        type: float
+        default: 0.25
+        description: Hard appearance mismatch rejection threshold
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      confidence_threshold:
+        type: float
+        default: 0.45
+        description: Minimum combined measurement confidence
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      point_retention_weight:
+        type: float
+        default: 0.25
+        description: Confidence weight for retained points
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      flow_consistency_weight:
+        type: float
+        default: 0.25
+        description: Confidence weight for forward/backward quality
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      geometry_weight:
+        type: float
+        default: 0.25
+        description: Confidence weight for transform inliers
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      appearance_weight:
+        type: float
+        default: 0.25
+        description: Confidence weight for target appearance
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      template_size:
+        type: integer
+        default: 48
+        description: Internal normalized appearance patch size
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 8
+        max: 256
+      template_update_alpha:
+        type: float
+        default: 0.05
+        description: Accepted adaptive-template learning rate
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      template_update_min_confidence:
+        type: float
+        default: 0.7
+        description: Minimum confidence for template adaptation
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      initial_template_weight:
+        type: float
+        default: 0.35
+        description: Stable initial vs adaptive template blend
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      reseed_interval_frames:
+        type: integer
+        default: 5
+        description: Accepted frames between point refreshes; 0 disables cadence refresh
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 10000
+      reseed_below_ratio:
+        type: float
+        default: 0.65
+        description: Refresh when points fall below this max-point fraction
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      failure_threshold:
+        type: integer
+        default: 5
+        description: Consecutive failures before one loss warning
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1
+        max: 1000
     additional_properties: false
   DLIB_Tracker:
     display_name: dlib Tracker

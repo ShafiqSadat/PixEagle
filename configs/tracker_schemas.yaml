@@ -300,6 +300,41 @@ tracker_types:
       recommended_scenarios:
         - "Single-target tracker comparison"
         - "Bounded recovery search with motion hints"
+
+  SparseFlowTracker:
+    name: "Sparse Flow Tracker"
+    description: "High-rate classic point tracking with forward-backward and appearance validation"
+    supported_schemas:
+      - POSITION_2D
+      - BBOX_CONFIDENCE
+      - VELOCITY_AWARE
+    capabilities:
+      - sparse_optical_flow
+      - forward_backward_validation
+      - robust_partial_affine_geometry
+      - appearance_revalidation
+      - adaptive_point_reseeding
+    performance:
+      evidence_required: true
+      note: "Benchmark fast motion, blur, texture, occlusion, drift, and latency on the intended camera and computer"
+    notes:
+      - "Short-term classic tracker; full occlusion recovery remains detector-assisted"
+      - "Prediction-only output is diagnostic and never command eligible"
+      - "Core OpenCV installation supplies all required runtime primitives"
+    ui_metadata:
+      display_name: "Sparse Flow"
+      short_description: "Fast validated point-flow tracking"
+      icon: "🎯"
+      factory_key: "SparseFlow"
+      exclude_from_ui: false
+      performance_category: "scenario_dependent"
+      suitable_for:
+        - "Fast textured single targets"
+        - "Aerial short-term tracking experiments"
+        - "Resource-constrained computers"
+      recommended_scenarios:
+        - "High-cadence target tracking with bounded detector recovery"
+        - "Comparison with CSRT, KCF, and dlib on recorded media"
       
   SmartTracker:
     name: "YOLO-based Smart Tracker"

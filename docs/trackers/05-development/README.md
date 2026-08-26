@@ -13,6 +13,7 @@ This section provides guidance for developers extending the tracker system with 
 | [Creating Trackers](creating-trackers.md) | Custom tracker implementation guide |
 | [Testing Trackers](testing-trackers.md) | Testing strategies and fixtures |
 | [Best Practices](best-practices.md) | Design patterns and guidelines |
+| [Sparse Flow Plan](sparse-flow-tracker-proposal.md) | Evidence, architecture, alternatives, and field-validation gates for the available target-test backend |
 
 ---
 

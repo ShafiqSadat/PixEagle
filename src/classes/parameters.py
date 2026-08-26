@@ -123,7 +123,8 @@ class Parameters(metaclass=_ParametersMeta):
         # Tracker sections
         'GimbalTracker',
         'ClassicTracker_Common',
-        'CSRT_Tracker', 'KCF_Tracker', 'DLIB_Tracker', 'SmartTracker'
+        'CSRT_Tracker', 'KCF_Tracker', 'DLIB_Tracker', 'SparseFlow_Tracker',
+        'SmartTracker'
     ]
 
     # Hybrid sections: stored as grouped dict AND flat params flattened to class attrs.

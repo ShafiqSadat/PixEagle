@@ -283,6 +283,19 @@ def main() -> int:
     if not all(tracker_apis.values()):
         raise SystemExit(f"OpenCV contrib tracker APIs are missing: {tracker_apis}")
 
+    sparse_flow_apis = {
+        name: callable(getattr(cv2, name, None))
+        for name in (
+            "calcOpticalFlowPyrLK",
+            "estimateAffinePartial2D",
+            "goodFeaturesToTrack",
+        )
+    }
+    if not all(sparse_flow_apis.values()):
+        raise SystemExit(
+            f"OpenCV Sparse Flow primitives are missing: {sparse_flow_apis}"
+        )
+
     try:
         owners = discover_opencv_distributions()
         if len(owners) > 1:
@@ -317,6 +330,7 @@ def main() -> int:
                     build_information.encode()
                 ).hexdigest(),
                 "tracker_apis": tracker_apis,
+                "sparse_flow_apis": sparse_flow_apis,
                 "distribution_owners": distribution_owners,
                 "fingerprinted_files": provider_files,
                 "fingerprint_scope": (

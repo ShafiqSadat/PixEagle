@@ -36,7 +36,12 @@ def _site_packages(environment: Path) -> Path:
     return Path(result.stdout.strip())
 
 
-def _write_fake_cv2(site_packages: Path, *, gstreamer: bool) -> Path:
+def _write_fake_cv2(
+    site_packages: Path,
+    *,
+    gstreamer: bool,
+    sparse_flow: bool = True,
+) -> Path:
     package = site_packages / "cv2"
     package.mkdir()
     module = package / "__init__.py"
@@ -48,6 +53,15 @@ def _write_fake_cv2(site_packages: Path, *, gstreamer: bool) -> Path:
                 f'    return "FFMPEG: YES\\nGStreamer: {"YES" if gstreamer else "NO"}\\n"',
                 "def TrackerCSRT_create(): return object()",
                 "def TrackerKCF_create(): return object()",
+                *(
+                    (
+                        "def calcOpticalFlowPyrLK(): return object()",
+                        "def estimateAffinePartial2D(): return object()",
+                        "def goodFeaturesToTrack(): return object()",
+                    )
+                    if sparse_flow
+                    else ()
+                ),
                 "",
             )
         ),
@@ -164,6 +178,17 @@ def test_probe_rejects_stale_known_opencv_metadata_without_cv2_record(fake_venv)
 
     assert result.returncode != 0
     assert "multiple OpenCV distribution owners" in result.stderr
+
+
+def test_probe_rejects_provider_without_sparse_flow_primitives(fake_venv):
+    environment, site_packages = fake_venv
+    _write_fake_cv2(site_packages, gstreamer=False, sparse_flow=False)
+    _write_wheel_owner(site_packages)
+
+    result = _run_probe(environment)
+
+    assert result.returncode != 0
+    assert "OpenCV Sparse Flow primitives are missing" in result.stderr
 
 
 def test_source_provider_fingerprints_native_layout_and_rejects_escape(fake_venv, tmp_path):

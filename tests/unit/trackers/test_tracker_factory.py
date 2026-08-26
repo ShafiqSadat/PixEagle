@@ -47,10 +47,15 @@ class TestTrackerFactoryRegistry:
         from classes.trackers.tracker_factory import TRACKER_REGISTRY
         assert "Gimbal" in TRACKER_REGISTRY
 
+    def test_registry_contains_sparse_flow(self):
+        """Sparse Flow should be registered as a classic tracker."""
+        from classes.trackers.tracker_factory import TRACKER_REGISTRY
+        assert "SparseFlow" in TRACKER_REGISTRY
+
     def test_registry_has_expected_count(self):
         """TRACKER_REGISTRY should have at least 4 tracker types."""
         from classes.trackers.tracker_factory import TRACKER_REGISTRY
-        assert len(TRACKER_REGISTRY) >= 4
+        assert len(TRACKER_REGISTRY) >= 5
 
     def test_registry_values_are_classes(self):
         """All registry values should be class types."""

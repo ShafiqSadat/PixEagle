@@ -388,7 +388,7 @@ SmartTracker can provide an external override to a classic tracker after the
 operator selects a current detection:
 
 ```
-Classic Tracker (CSRT, KCF, dlib)
+Classic Tracker (CSRT, KCF, Sparse Flow, dlib)
         ↑
         │ Override when SmartTracker active
         │

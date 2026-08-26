@@ -51,6 +51,24 @@ Tracking:
 Its Kalman state is diagnostic. It does not authorize follower commands during
 loss and does not identify a returning object.
 
+### Sparse Flow
+
+Use Sparse Flow as the model-free point-tracking candidate for textured,
+fast-moving targets:
+
+```yaml
+Tracking:
+  DEFAULT_TRACKING_ALGORITHM: "SparseFlow"
+
+SparseFlow_Tracker:
+  feature_strategy: "auto"
+```
+
+Start with the checked-in defaults. Compare point retention, forward-backward
+error, geometry inliers, appearance confidence, false locks, and update latency
+on the same clip. Raising error limits can preserve continuity while also
+accepting drift, so treat those metrics together.
+
 ### dlib
 
 Use dlib only after the optional runtime passes its capability check:
@@ -82,6 +100,8 @@ Use tracker telemetry and logs to identify the failing gate:
 | OpenCV tracker reports no candidate | target pixels, blur, frame jumps, crop | larger initial ROI or detector-assisted recovery |
 | `low_confidence` | motion and appearance confidence | compare a small threshold change on the same clip |
 | `appearance_mismatch` | lighting, compression, background in ROI | improve ROI composition; reduce appearance gate only with false-lock evidence |
+| `insufficient_consistent_points` | texture, blur, frame jump, target size | compare ROI composition, LK window/pyramid, and detector recovery |
+| `insufficient_geometry_consensus` | mixed foreground/background flow, deformation | inspect point distribution and inlier ratio before widening RANSAC limits |
 | `motion_invalid` | frame cadence and camera/target displacement | raise the active motion gate gradually |
 | `scale_invalid` | zoom and target-size change | raise scale gate gradually |
 | `reacquisition_pending` | consecutive candidate stability | inspect candidate trajectory; do not remove consensus to hide drift |

@@ -241,6 +241,7 @@ def test_default_tracking_algorithm_options_come_from_tracker_catalog():
     assert [option['value'] for option in schema['options']] == [
         'CSRT',
         'KCF',
+        'SparseFlow',
         'Gimbal',
         'dlib',
     ]
@@ -582,6 +583,7 @@ def test_default_tracking_algorithm_options_in_schema():
     assert [option['value'] for option in param['options']] == [
         'CSRT',
         'KCF',
+        'SparseFlow',
         'Gimbal',
         'dlib',
     ]

@@ -19,7 +19,12 @@ def _load_yaml(relative_path: str):
 def test_classic_tracker_catalog_requires_scenario_evidence():
     catalog = _load_yaml("configs/tracker_schemas.yaml")["tracker_types"]
 
-    for tracker_name in ("CSRTTracker", "KCFKalmanTracker", "DlibTracker"):
+    for tracker_name in (
+        "CSRTTracker",
+        "KCFKalmanTracker",
+        "SparseFlowTracker",
+        "DlibTracker",
+    ):
         tracker = catalog[tracker_name]
         assert "occlusion_handling" not in tracker["capabilities"]
         assert tracker["performance"]["evidence_required"] is True

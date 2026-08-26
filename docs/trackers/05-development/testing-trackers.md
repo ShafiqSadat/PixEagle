@@ -41,6 +41,39 @@ pytest tests/unit/test_my_tracker.py::TestMyTracker::test_start_tracking -v
 pytest tests/unit/ -m "not slow"
 ```
 
+### Offline Short-Term Benchmark
+
+Use the same source frames and initial box for each classic backend:
+
+```bash
+PYTHONPATH=src .venv/bin/python tools/benchmark_classic_tracker.py \
+  --video /path/to/clip.mp4 \
+  --tracker SparseFlow \
+  --bbox x,y,width,height \
+  --output reports/sparse-flow.json
+```
+
+Accepted tracker values are `CSRT`, `KCF`, `SparseFlow`, and `dlib` when the
+optional dlib backend is installed. The runner records the video digest,
+environment, exact tracker config, usable measurement rate, and p50/p95 update
+latency.
+
+Optional annotations use zero-based frame numbers:
+
+```json
+{
+  "frames": [
+    {"frame": 12, "bbox": [100, 80, 40, 30]},
+    {"frame": 13, "visible": false, "bbox": null}
+  ]
+}
+```
+
+Pass them with `--annotations annotations.json` to add IoU, 20-pixel center
+precision, and false-lock results. This runner intentionally excludes shared
+estimator and detector recovery. It is backend evidence, not system, PX4, HIL,
+flight, or field evidence.
+
 ---
 
 ## Test Fixtures

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## Version 7.1.0 (2026-08-26) - Sparse Flow Tracker
+
+- Add an opt-in, target-test-ready `SparseFlow` classic tracker built from maintained
+  OpenCV feature, pyramidal optical-flow, and robust-geometry primitives. Its
+  proposal/commit boundary prevents rejected frames from adapting accepted
+  state, and prediction-only or failed output remains follower-ineligible.
+  CSRT remains the default; target-hardware and annotated aerial-video evidence
+  are still required before any field or parity claim.
+- Add a repeatable equal-input classic-tracker benchmark with video hashes,
+  environment/config provenance, latency and availability metrics, and optional
+  IoU, center-error, and false-lock annotations.
 - Preflight the browser-lab runtime mode before changing credentials, config,
   or firewall rules. An interactive run now asks before stopping an owned
   managed service or restarting a manual runtime; unattended switching requires

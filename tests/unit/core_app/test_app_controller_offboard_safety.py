@@ -2705,6 +2705,7 @@ async def test_api_v1_tracking_catalog_ui_names_are_switch_action_valid():
     ui_tracker_names = [entry["name"] for entry in payload["ui_trackers"]]
 
     assert "CSRTTracker" in ui_tracker_names
+    assert "SparseFlowTracker" in ui_tracker_names
     assert "GimbalTracker" in ui_tracker_names
 
     schema_manager = get_schema_manager()
@@ -2729,6 +2730,8 @@ async def test_real_tracker_schema_accepts_ui_and_factory_identifiers():
         "CSRT": "CSRTTracker",
         "KCFKalmanTracker": "KCFKalmanTracker",
         "KCF": "KCFKalmanTracker",
+        "SparseFlowTracker": "SparseFlowTracker",
+        "SparseFlow": "SparseFlowTracker",
         "DlibTracker": "DlibTracker",
         "dlib": "DlibTracker",
         "GimbalTracker": "GimbalTracker",

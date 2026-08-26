@@ -33,6 +33,7 @@ Supported Algorithms:
 - "CSRT": Channel and Spatial Reliability Tracker
 - "KCF": KCF + Kalman Filter Tracker
 - "dlib": dlib Correlation Filter Tracker (fast, PSR-based confidence)
+- "SparseFlow": Sparse optical flow with forward-backward validation
 - "Gimbal": Gimbal-based UDP Angle Tracker
 - Additional trackers can be added by implementing their classes and updating the factory.
 
@@ -47,6 +48,7 @@ from classes.trackers.csrt_tracker import CSRTTracker
 from classes.trackers.kcf_kalman_tracker import KCFKalmanTracker
 from classes.trackers.gimbal_tracker import GimbalTracker
 from classes.trackers.dlib_tracker import DlibTracker
+from classes.trackers.sparse_flow_tracker import SparseFlowTracker
 
 # Tracker registry - maps algorithm names to tracker classes
 # To add a new tracker: 1) Import the class above, 2) Add entry to this registry
@@ -54,6 +56,7 @@ TRACKER_REGISTRY = {
     "CSRT": CSRTTracker,
     "KCF": KCFKalmanTracker,
     "dlib": DlibTracker,
+    "SparseFlow": SparseFlowTracker,
     "Gimbal": GimbalTracker,
 }
 
@@ -87,4 +90,3 @@ def create_tracker(algorithm: str, video_handler=None, detector=None, app_contro
         raise ValueError(f"Unsupported tracking algorithm: '{algorithm}'. Supported: {supported}")
 
     return tracker_class(video_handler, detector, app_controller)
-

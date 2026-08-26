@@ -57,6 +57,7 @@ SECTION_CATEGORIES = {
     'CSRT_Tracker': {'category': 'tracking', 'display_name': 'CSRT Tracker', 'icon': 'track_changes'},
     'KCF_Tracker': {'category': 'tracking', 'display_name': 'KCF Tracker', 'icon': 'track_changes'},
     'DLIB_Tracker': {'category': 'tracking', 'display_name': 'dlib Tracker', 'icon': 'track_changes'},
+    'SparseFlow_Tracker': {'category': 'tracking', 'display_name': 'Sparse Flow Tracker', 'icon': 'track_changes'},
     'ClassicTracker_Common': {'category': 'tracking', 'display_name': 'Classic Tracker Common', 'icon': 'tune'},
     'SmartTracker': {'category': 'tracking', 'display_name': 'Smart Tracker (YOLO)', 'icon': 'smart_toy'},
     'GimbalTracker': {'category': 'tracking', 'display_name': 'Gimbal Tracker', 'icon': 'control_camera'},
@@ -319,6 +320,94 @@ SCHEMA_OVERRIDES = {
             'process reboot'
         ),
     },
+    'SparseFlow_Tracker.feature_strategy': {
+        'options': [
+            {
+                'value': 'auto',
+                'label': 'Auto',
+                'description': 'Prefer corner features and fill sparse regions with a grid',
+            },
+            {
+                'value': 'gftt',
+                'label': 'Corners',
+                'description': 'Use Shi-Tomasi corner features only',
+            },
+            {
+                'value': 'grid',
+                'label': 'Grid',
+                'description': 'Use evenly spaced target points only',
+            },
+        ],
+    },
+    'SparseFlow_Tracker.max_points': {'min': 4, 'max': 2000},
+    'SparseFlow_Tracker.min_points': {'min': 3, 'max': 2000},
+    'SparseFlow_Tracker.quality_level': {
+        'min': 0.000001,
+        'max': 1.0,
+        'step': 0.001,
+    },
+    'SparseFlow_Tracker.roi_inset_ratio': {
+        'min': 0.0,
+        'max': 0.45,
+        'step': 0.01,
+    },
+    'SparseFlow_Tracker.lk_window_size': {
+        'min': 5,
+        'max': 101,
+        'step': 2,
+    },
+    'SparseFlow_Tracker.lk_max_level': {'min': 0, 'max': 8},
+    'SparseFlow_Tracker.lk_max_iterations': {'min': 1, 'max': 200},
+    'SparseFlow_Tracker.lk_epsilon': {
+        'min': 0.000001,
+        'max': 1.0,
+        'step': 0.001,
+    },
+    'SparseFlow_Tracker.fb_error_min_px': {
+        'min': 0.0,
+        'max': 100.0,
+        'step': 0.1,
+        'unit': 'px',
+    },
+    'SparseFlow_Tracker.fb_error_max_px': {
+        'min': 0.0,
+        'max': 500.0,
+        'step': 0.5,
+        'unit': 'px',
+    },
+    'SparseFlow_Tracker.ransac_reproj_min_px': {
+        'min': 0.01,
+        'max': 100.0,
+        'step': 0.1,
+        'unit': 'px',
+    },
+    'SparseFlow_Tracker.ransac_reproj_max_px': {
+        'min': 0.01,
+        'max': 500.0,
+        'step': 0.5,
+        'unit': 'px',
+    },
+    'SparseFlow_Tracker.ransac_max_iterations': {'min': 1, 'max': 10000},
+    'SparseFlow_Tracker.ransac_confidence': {
+        'min': 0.5,
+        'max': 0.999999,
+        'step': 0.001,
+    },
+    'SparseFlow_Tracker.ransac_refine_iterations': {'min': 0, 'max': 100},
+    'SparseFlow_Tracker.max_scale_change_per_frame': {
+        'min': 0.0,
+        'max': 2.0,
+        'step': 0.01,
+    },
+    'SparseFlow_Tracker.max_rotation_degrees_per_frame': {
+        'min': 0.0,
+        'max': 180.0,
+        'step': 1.0,
+        'unit': 'deg',
+    },
+    'SparseFlow_Tracker.template_size': {'min': 8, 'max': 256},
+    'SparseFlow_Tracker.reseed_interval_frames': {'min': 0, 'max': 10000},
+    'SparseFlow_Tracker.failure_threshold': {'min': 1, 'max': 1000},
     'VideoSource.VIDEO_FILE_EOF_POLICY': {
         'options': [
             {'value': 'LOOP', 'label': 'Loop',
@@ -1045,6 +1134,7 @@ SECTION_RELOAD_TIERS = {
     'CSRT_Tracker': 'tracker_restart',
     'KCF_Tracker': 'tracker_restart',
     'DLIB_Tracker': 'tracker_restart',
+    'SparseFlow_Tracker': 'tracker_restart',
     'GimbalTracker': 'tracker_restart',
     'GimbalTrackerSettings': 'tracker_restart',
     'Detector': 'tracker_restart',

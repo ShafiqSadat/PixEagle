@@ -12,7 +12,7 @@ overrides belong in `configs/config.yaml`; both are validated by the generated
 
 ```yaml
 Tracking:
-  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, dlib, Gimbal
+  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, dlib, Gimbal
   CENTER_HISTORY_LENGTH: 10
   MOTION_CONFIDENCE_WEIGHT: 0.5
   APPEARANCE_CONFIDENCE_WEIGHT: 0.5
@@ -71,7 +71,7 @@ CSRT_Tracker:
   appearance_learning_rate: 0.1
 ```
 
-For CSRT, KCF, and dlib, `failure_threshold` controls when repeated rejected
+For CSRT, KCF, Sparse Flow, and dlib, `failure_threshold` controls when repeated rejected
 measurements are reported as a confirmed loss. It is not a command-validity
 grace period: the first rejected measurement is immediately stale and unusable
 for following.
@@ -108,6 +108,29 @@ KCF_Tracker:
 
 The internal KCF prediction is diagnostic and is never a command-eligible
 measurement. Application-level detector recovery owns reacquisition.
+
+---
+
+## Sparse Flow Tracker
+
+```yaml
+SparseFlow_Tracker:
+  feature_strategy: "auto"
+  max_points: 100
+  min_points: 8
+  lk_window_size: 21
+  lk_max_level: 3
+  fb_error_ratio: 0.025
+  min_inlier_ratio: 0.55
+  min_appearance_confidence: 0.25
+  confidence_threshold: 0.45
+  reseed_interval_frames: 5
+  failure_threshold: 5
+```
+
+The generated Settings schema exposes the complete advanced parameter set and
+validated ranges. See the [Sparse Flow reference](../02-reference/sparse-flow-tracker.md)
+before changing flow, geometry, appearance, or reseeding gates.
 
 ---
 

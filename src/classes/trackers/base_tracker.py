@@ -320,7 +320,7 @@ class BaseTracker(ABC):
         return self.compute_motion_confidence() >= Parameters.MOTION_CONFIDENCE_THRESHOLD
 
     def _smooth_confidence(self, raw_confidence: float) -> float:
-        """Apply EMA smoothing to confidence. Shared by CSRT, KCF, dlib."""
+        """Apply EMA smoothing to confidence for classic tracker adapters."""
         raw_confidence = self._normalize_confidence(raw_confidence)
         self.confidence = self._normalize_confidence(self.confidence)
         self.raw_confidence_history.append(raw_confidence)
@@ -333,7 +333,7 @@ class BaseTracker(ABC):
         return self.confidence
 
     # =========================================================================
-    # Validation (shared by CSRT, KCF, dlib robust modes)
+    # Validation shared by classic tracker adapters.
     # =========================================================================
 
     def _validate_bbox_motion(self, bbox: Tuple, estimator_prediction: Optional[Tuple]) -> bool:
@@ -812,10 +812,12 @@ class BaseTracker(ABC):
                 (x + w) > (frame_width - margin) or
                 (y + h) > (frame_height - margin))
 
-    def get_boundary_status(self) -> dict:
-        if not self.bbox or not self.video_handler:
+    def get_boundary_status_for_bbox(self, bbox: Optional[Tuple] = None) -> dict:
+        """Return boundary proximity for explicit or currently confirmed geometry."""
+        evaluated_bbox = self.bbox if bbox is None else bbox
+        if not evaluated_bbox or not self.video_handler:
             return {'near_boundary': False, 'edges': [], 'min_distance': float('inf')}
-        x, y, w, h = self.bbox
+        x, y, w, h = evaluated_bbox
         frame_width = self.video_handler.width
         frame_height = self.video_handler.height
         margin = BaseTracker._configured_boundary_margin()
@@ -837,11 +839,38 @@ class BaseTracker(ABC):
             'margin': margin
         }
 
+    def get_boundary_status(self) -> dict:
+        return BaseTracker.get_boundary_status_for_bbox(self)
+
     def compute_boundary_confidence_penalty(self) -> float:
         enabled, minimum_penalty = BaseTracker._configured_boundary_penalty()
         if not enabled:
             return 1.0
-        boundary_status = self.get_boundary_status()
+        return BaseTracker._boundary_penalty_from_status(
+            self.get_boundary_status(),
+            minimum_penalty,
+        )
+
+    def compute_boundary_confidence_penalty_for_bbox(
+        self,
+        bbox: Optional[Tuple],
+    ) -> float:
+        """Return the shared edge penalty without publishing candidate geometry."""
+        enabled, minimum_penalty = BaseTracker._configured_boundary_penalty()
+        if not enabled:
+            return 1.0
+        boundary_status = BaseTracker.get_boundary_status_for_bbox(self, bbox)
+        return BaseTracker._boundary_penalty_from_status(
+            boundary_status,
+            minimum_penalty,
+        )
+
+    @staticmethod
+    def _boundary_penalty_from_status(
+        boundary_status: dict,
+        minimum_penalty: float,
+    ) -> float:
+        """Map one boundary status to the canonical confidence penalty."""
         if not boundary_status['near_boundary']:
             return 1.0
         min_distance = boundary_status['min_distance']

@@ -26,10 +26,12 @@ from classes.trackers.csrt_tracker import CSRTTracker
 from classes.trackers.kcf_kalman_tracker import KCFKalmanTracker
 from classes.trackers.gimbal_tracker import GimbalTracker
 from classes.trackers.dlib_tracker import DlibTracker
+from classes.trackers.sparse_flow_tracker import SparseFlowTracker
 
 TRACKER_REGISTRY = {
     "CSRT": CSRTTracker,
     "KCF": KCFKalmanTracker,
+    "SparseFlow": SparseFlowTracker,
     "dlib": DlibTracker,
     "Gimbal": GimbalTracker,
 }
@@ -50,7 +52,7 @@ def create_tracker(algorithm: str,
     Factory function to create tracker instances.
 
     Args:
-        algorithm (str): Tracker name ("CSRT", "KCF", "dlib", "Gimbal")
+        algorithm (str): Tracker name ("CSRT", "KCF", "SparseFlow", "dlib", "Gimbal")
         video_handler: Video streaming handler
         detector: Feature detector for appearance
         app_controller: Main application controller
@@ -107,7 +109,7 @@ try:
     tracker = create_tracker("unknown_tracker")
 except ValueError as e:
     print(f"Error: {e}")
-    # Error: Unsupported: 'unknown_tracker'. Supported: CSRT, Gimbal, KCF, dlib
+    # Error lists the current catalog-backed registry values.
 ```
 
 ---
@@ -184,7 +186,7 @@ from classes.trackers.tracker_factory import TRACKER_REGISTRY
 
 # List all available trackers
 available = list(TRACKER_REGISTRY.keys())
-# ['CSRT', 'KCF', 'dlib', 'Gimbal']
+# ['CSRT', 'KCF', 'SparseFlow', 'dlib', 'Gimbal']
 
 # Check if tracker exists
 if "CSRT" in TRACKER_REGISTRY:

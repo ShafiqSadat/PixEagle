@@ -348,8 +348,8 @@ TrackerSafety:
 # ==============================================================================
 # CLASSIC TRACKER COMMON SETTINGS
 # ==============================================================================
-# Shared defaults for all classic trackers (CSRT, KCF, dlib).
-# Individual tracker sections (CSRT_Tracker, KCF_Tracker, DLIB_Tracker)
+# Shared defaults for all classic trackers (CSRT, KCF, Sparse Flow, dlib).
+# Individual tracker sections (CSRT_Tracker, KCF_Tracker, SparseFlow_Tracker, DLIB_Tracker)
 # override these values when set.
 ClassicTracker_Common:
   appearance_update_min_confidence: 0.55  # Minimum confidence for appearance updates
@@ -431,6 +431,56 @@ CSRT_Tracker:
   # After a rejection, require consecutive valid candidates before publication.
   enable_multiframe_validation: true
   validation_consensus_frames: 3
+
+# ==============================================================================
+# SPARSE FLOW TRACKER CONFIGURATION
+# ==============================================================================
+# Lightweight classic tracking built from OpenCV pyramidal Lucas-Kanade flow,
+# forward/backward consistency, robust partial-affine geometry, appearance
+# revalidation, and adaptive point reseeding. Prediction and detector recovery
+# remain owned by PixEagle's shared tracker lifecycle.
+SparseFlow_Tracker:
+  feature_strategy: "auto"              # auto, gftt, grid
+  max_points: 100                        # Maximum target points maintained
+  min_points: 8                          # Minimum consistent points for a measurement
+  quality_level: 0.01                    # Shi-Tomasi quality fraction
+  min_distance_ratio: 0.035              # Point spacing as target-diagonal fraction
+  roi_inset_ratio: 0.06                  # Avoid unstable points on the ROI edge
+
+  lk_window_size: 21                     # Odd Lucas-Kanade window size in pixels
+  lk_max_level: 3                        # Optical-flow pyramid depth
+  lk_max_iterations: 30                  # Solver iteration limit per pyramid level
+  lk_epsilon: 0.01                       # Solver convergence threshold
+
+  fb_error_ratio: 0.025                  # Forward/backward limit relative to target diagonal
+  fb_error_min_px: 0.75                  # Lower pixel bound for small targets
+  fb_error_max_px: 10.0                  # Upper pixel bound for large targets
+
+  ransac_reproj_ratio: 0.03              # Geometry residual relative to target diagonal
+  ransac_reproj_min_px: 1.0              # Lower geometry residual bound in pixels
+  ransac_reproj_max_px: 12.0             # Upper geometry residual bound in pixels
+  ransac_max_iterations: 1000            # Robust transform iteration limit
+  ransac_confidence: 0.99                 # Requested transform confidence
+  ransac_refine_iterations: 10           # Inlier-only transform refinement iterations
+  min_inlier_ratio: 0.55                  # Minimum robust geometry consensus
+  max_scale_change_per_frame: 0.35        # Maximum accepted scale delta per frame
+  max_rotation_degrees_per_frame: 35.0    # Maximum accepted image-plane rotation per frame
+
+  min_appearance_confidence: 0.25         # Hard appearance mismatch rejection threshold
+  confidence_threshold: 0.45              # Minimum combined measurement confidence
+  point_retention_weight: 0.25            # Confidence weight for retained points
+  flow_consistency_weight: 0.25           # Confidence weight for forward/backward quality
+  geometry_weight: 0.25                   # Confidence weight for transform inliers
+  appearance_weight: 0.25                 # Confidence weight for target appearance
+
+  template_size: 48                       # Internal normalized appearance patch size
+  template_update_alpha: 0.05             # Accepted adaptive-template learning rate
+  template_update_min_confidence: 0.70     # Minimum confidence for template adaptation
+  initial_template_weight: 0.35            # Stable initial vs adaptive template blend
+
+  reseed_interval_frames: 5               # Accepted frames between point refreshes; 0 disables cadence refresh
+  reseed_below_ratio: 0.65                 # Refresh when points fall below this max-point fraction
+  failure_threshold: 5                    # Consecutive failures before one loss warning
 
 # ==============================================================================
 # DLIB TRACKER CONFIGURATION (optional dlib correlation backend)
