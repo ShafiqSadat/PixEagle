@@ -1684,6 +1684,44 @@ class ConfigService:
         with self._mutation_lock:
             return copy.deepcopy(self._default)
 
+    def get_effective_section(
+        self,
+        section: str,
+        *,
+        overrides: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Return one section with checked-in defaults overlaid by local values.
+
+        Runtime configuration is intentionally allowed to remain sparse while
+        Config Sync is waiting for an operator decision. Components that are
+        available in a newer release must still be constructible in that
+        state, so they can use this method instead of duplicating defaults or
+        treating a missing section as an invalid installation.
+
+        ``overrides`` is useful for consumers whose in-memory Parameters view
+        has already been published while the ConfigService persistence view is
+        being reconciled. When omitted, the persisted runtime section is used.
+        """
+        if not isinstance(section, str) or not section.strip():
+            raise ValueError("Configuration section name must be a non-empty string")
+
+        with self._mutation_lock:
+            defaults = self._default.get(section, {})
+            configured = (
+                self._config.get(section, {})
+                if overrides is None
+                else overrides
+            )
+            if defaults is None:
+                defaults = {}
+            if configured is None:
+                configured = {}
+            if not isinstance(defaults, dict) or not isinstance(configured, dict):
+                raise ValueError(
+                    f"Configuration section {section!r} must be a mapping"
+                )
+            return self._deep_merge_mapping(defaults, configured)
+
     def get_default_config(self, section: Optional[str] = None) -> Dict:
         """Backward-compatible alias for default configuration retrieval."""
         return self.get_default(section)

@@ -133,6 +133,20 @@ class TestConfigServiceRead:
         val = service.get_default_parameter('VideoSource', 'VIDEO_SOURCE_TYPE')
         assert val is None or isinstance(val, str)
 
+    def test_get_effective_section_overlays_sparse_runtime_values(self, service):
+        """New components can use defaults before Config Sync persists additions."""
+        original = service._config
+        try:
+            service._config = {'SparseFlow_Tracker': {'max_points': 24}}
+            effective = service.get_effective_section('SparseFlow_Tracker')
+        finally:
+            service._config = original
+
+        assert effective['max_points'] == 24
+        assert effective['feature_strategy'] == service.get_default(
+            'SparseFlow_Tracker'
+        )['feature_strategy']
+
     def test_public_state_getters_return_defensive_snapshots(self, service):
         config = service.get_config()
         defaults = service.get_default()

@@ -136,6 +136,10 @@ automatically.
   Unselected changed defaults remain visible on the next review. Metadata marks
   whether the resulting baseline is full or incremental; a source-file digest
   is retained only when the full baseline exactly represents current defaults.
+- Runtime components overlay their checked-in section defaults onto a sparse
+  local config while Config Sync is pending. This keeps newly added optional
+  components usable without silently rewriting the operator's config; an
+  explicit sync or reset is still required to persist the new values.
 
 Manual redacted status:
 

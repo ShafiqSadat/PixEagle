@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 
+from classes.config_service import ConfigService
 from classes.parameters import Parameters
 from classes.tracker_output import TrackerOutput
 from classes.trackers.base_tracker import BaseTracker
@@ -40,8 +41,12 @@ class SparseFlowTracker(BaseTracker):
     ) -> None:
         super().__init__(video_handler, detector, app_controller)
         self.tracker_name = "SparseFlow"
+        configured = getattr(Parameters, "SparseFlow_Tracker", None)
         self.config = SparseFlowConfig.from_mapping(
-            getattr(Parameters, "SparseFlow_Tracker", {})
+            ConfigService.get_instance().get_effective_section(
+                "SparseFlow_Tracker",
+                overrides=configured if configured is not None else None,
+            )
         )
         self.flow_core = SparseFlowCore(self.config)
         self.failure_threshold = self.config.failure_threshold

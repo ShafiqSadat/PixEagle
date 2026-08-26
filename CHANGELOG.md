@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## Version 7.1.1 (2026-08-26) - Sparse Configuration Compatibility
+
+- Allow the Sparse Flow tracker to use checked-in defaults when an older local
+  configuration does not yet contain its section, while preserving any local
+  overrides. This keeps tracker switching usable until the operator reviews
+  and persists Config Sync additions.
+
 ## Version 7.1.0 (2026-08-26) - Sparse Flow Tracker
 
 - Add an opt-in, target-test-ready `SparseFlow` classic tracker built from maintained

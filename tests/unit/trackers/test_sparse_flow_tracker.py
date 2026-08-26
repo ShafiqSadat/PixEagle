@@ -98,3 +98,40 @@ def test_factory_creates_sparse_flow_tracker(monkeypatch):
     )
 
     assert isinstance(created, SparseFlowTracker)
+
+
+def test_factory_uses_checked_in_defaults_when_runtime_section_is_missing(monkeypatch):
+    """A pre-SparseFlow local config must not block the new tracker."""
+    from classes.trackers.tracker_factory import create_tracker
+
+    monkeypatch.delattr(Parameters, "SparseFlow_Tracker", raising=False)
+    created = create_tracker(
+        "SparseFlow",
+        MockVideoHandler(width=320, height=240),
+        detector=None,
+        app_controller=MockAppController(),
+    )
+
+    assert created.config.feature_strategy == "auto"
+    assert created.config.min_points == 8
+
+
+def test_factory_overlays_partial_runtime_section_on_checked_in_defaults(monkeypatch):
+    """Operator overrides may remain sparse while new defaults fill the rest."""
+    from classes.trackers.tracker_factory import create_tracker
+
+    monkeypatch.setattr(
+        Parameters,
+        "SparseFlow_Tracker",
+        {"max_points": 24},
+        raising=False,
+    )
+    created = create_tracker(
+        "SparseFlow",
+        MockVideoHandler(width=320, height=240),
+        detector=None,
+        app_controller=MockAppController(),
+    )
+
+    assert created.config.max_points == 24
+    assert created.config.feature_strategy == "auto"
