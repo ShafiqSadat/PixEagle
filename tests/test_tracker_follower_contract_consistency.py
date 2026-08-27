@@ -24,6 +24,7 @@ def test_classic_tracker_catalog_requires_scenario_evidence():
         "KCFKalmanTracker",
         "SparseFlowTracker",
         "VitTrackTracker",
+        "DaSiamRPNTracker",
         "DlibTracker",
     ):
         tracker = catalog[tracker_name]

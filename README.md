@@ -99,7 +99,7 @@ are documented in the [Windows Preview Guide](docs/WINDOWS_SETUP.md).
 | Area | Current software surface |
 |------|--------------------------|
 | **Video input** | Files, USB/CSI cameras, RTSP, HTTP, UDP, and custom GStreamer pipelines |
-| **Tracking** | OpenCV CSRT/KCF/VitTrack, SparseFlow, optional dlib, AI-assisted SmartTracker, and external gimbal tracking |
+| **Tracking** | OpenCV CSRT/KCF/VitTrack/DaSiamRPN, SparseFlow, optional dlib, AI-assisted SmartTracker, and external gimbal tracking |
 | **AI detection** | Registered local YOLO detect/OBB models with runtime and accelerator checks |
 | **Guidance** | Multicopter, fixed-wing, and gimbal follower profiles that produce typed command intents |
 | **PX4 integration** | Telemetry and guarded Offboard publication paths through MAVSDK, MAVLink, and MAVLink2REST |

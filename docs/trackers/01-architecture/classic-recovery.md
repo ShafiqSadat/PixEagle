@@ -1,7 +1,7 @@
 # Classic Tracker Recovery
 
 PixEagle has one bounded detector-assisted recovery path for classic visual
-trackers. CSRT, KCF, SparseFlow, VitTrack, dlib, and future `BaseTracker` implementations
+trackers. CSRT, KCF, SparseFlow, VitTrack, DaSiamRPN, dlib, and future `BaseTracker` implementations
 use this path; they do not implement private retry loops.
 
 Smart/AI association and external gimbal providers keep provider-specific loss
@@ -139,4 +139,5 @@ Primary design references:
 Related: [Tracker architecture](README.md),
 [tuning guide](../04-configuration/tuning-guide.md), and
 [SparseFlow](../02-reference/sparse-flow-tracker.md), and
-[VitTrack](../02-reference/vittrack-tracker.md).
+[VitTrack](../02-reference/vittrack-tracker.md), and
+[DaSiamRPN](../02-reference/dasiamrpn-tracker.md).

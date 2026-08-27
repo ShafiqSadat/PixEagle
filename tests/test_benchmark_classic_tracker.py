@@ -21,6 +21,13 @@ def test_benchmark_accepts_vittrack():
     assert args.tracker == "VitTrack"
 
 
+def test_benchmark_accepts_dasiamrpn():
+    args = build_parser().parse_args(
+        ["--video", "clip.mp4", "--tracker", "DaSiamRPN", "--bbox", "1,2,30,40"]
+    )
+    assert args.tracker == "DaSiamRPN"
+
+
 def test_bbox_metrics_are_deterministic():
     assert bbox_iou((0, 0, 10, 10), (5, 0, 10, 10)) == pytest.approx(1 / 3)
     assert center_error((0, 0, 10, 10), (3, 4, 10, 10)) == pytest.approx(5.0)

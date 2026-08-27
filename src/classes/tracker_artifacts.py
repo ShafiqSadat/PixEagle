@@ -145,6 +145,11 @@ def resolve_tracker_artifact(
     *,
     project_root: Optional[Path] = None,
     manifest_path: Optional[Path] = None,
+    artifact_id_field: str = "artifact_id",
+    path_override_field: str = "model_path_override",
+    digest_override_field: str = "model_sha256_override",
+    max_bytes_field: str = "model_max_bytes",
+    default_artifact_id: str = "opencv_vittrack_2023sep",
 ) -> ResolvedTrackerArtifact:
     """Resolve and verify a manifest artifact or explicit operator override.
 
@@ -154,13 +159,13 @@ def resolve_tracker_artifact(
     root = Path(project_root or PROJECT_ROOT).resolve()
     models_root = root / "models"
     artifact_id = str(
-        config.get("artifact_id", "opencv_vittrack_2023sep")
+        config.get(artifact_id_field, default_artifact_id)
     ).strip()
-    path_override = str(config.get("model_path_override", "") or "").strip()
-    digest_override = str(config.get("model_sha256_override", "") or "").strip()
+    path_override = str(config.get(path_override_field, "") or "").strip()
+    digest_override = str(config.get(digest_override_field, "") or "").strip()
     if bool(path_override) != bool(digest_override):
         raise TrackerArtifactError(
-            "VitTrack custom model path and SHA-256 must be configured together"
+            f"{path_override_field} and {digest_override_field} must be configured together"
         )
 
     manifest = load_tracker_artifact_manifest(
@@ -178,9 +183,9 @@ def resolve_tracker_artifact(
         configured_path = path_override
         expected_sha = _normalized_sha256(
             digest_override,
-            field="model_sha256_override",
+            field=digest_override_field,
         )
-        expected_size = int(config.get("model_max_bytes", 16 * 1024 * 1024))
+        expected_size = int(config.get(max_bytes_field, 16 * 1024 * 1024))
         publisher = "operator-configured"
         source_url = ""
         license_name = "operator-reviewed"
@@ -194,8 +199,10 @@ def resolve_tracker_artifact(
         license_name = str(record["license"])
         resolved_id = artifact_id
 
-    if expected_size <= 0 or expected_size > 64 * 1024 * 1024:
-        raise TrackerArtifactError("VitTrack model_max_bytes is outside the supported range")
+    if expected_size <= 0 or expected_size > 256 * 1024 * 1024:
+        raise TrackerArtifactError(
+            f"{max_bytes_field} is outside the supported range"
+        )
     path = _resolve_owned_model_path(
         configured_path,
         project_root=root,

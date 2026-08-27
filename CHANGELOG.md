@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add optional OpenCV `DaSiamRPN` as a heavier distractor-aware classic
+  tracker. Its three MIT-licensed model files are checksum-pinned, installed by
+  one default-No setup choice, reused when exact, and isolated from Core setup
+  failure. The adapter shares PixEagle's validation, consensus, freshness, and
+  bounded recovery lifecycle; native model confidence remains a hard gate.
+- Add DaSiamRPN Settings/catalog integration, benchmark support, focused tests,
+  and operator documentation. An exact unannotated 500-frame replay produced
+  461 usable measurements at 81.0 ms median on the test VPS; target hardware,
+  annotated accuracy, identity, camera, and field validation remain pending.
+
 ## Version 7.2.0 (2026-08-26) - VitTrack Candidate
 
 - Add `VitTrack`, an opt-in OpenCV model-backed classic tracker that combines

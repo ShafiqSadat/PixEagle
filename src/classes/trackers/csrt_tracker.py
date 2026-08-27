@@ -371,6 +371,10 @@ class CSRTTracker(BaseTracker):
         """Apply fail-closed candidate validation and reacquisition consensus."""
         return self._update_multiframe_consensus(is_valid)
 
+    def _confidence_is_valid(self, confidence: float) -> bool:
+        """Return whether an adapter's complete confidence contract is met."""
+        return confidence >= self.confidence_threshold
+
     def _appearance_is_valid(self) -> bool:
         """Apply the canonical detector appearance threshold when available."""
         if (
@@ -393,7 +397,7 @@ class CSRTTracker(BaseTracker):
         raw_confidence = self._evaluate_candidate_confidence(frame, bbox)
         self._set_candidate_geometry(bbox)
         self.confidence = raw_confidence
-        confidence_valid = raw_confidence >= self.confidence_threshold
+        confidence_valid = self._confidence_is_valid(raw_confidence)
         appearance_valid = self._appearance_is_valid()
         if not self._candidate_is_confirmed(confidence_valid and appearance_valid):
             logger.debug("%s candidate rejected in legacy mode", self.tracker_name)
@@ -420,7 +424,7 @@ class CSRTTracker(BaseTracker):
                                if self.enable_ema_smoothing else raw_confidence)
         self.confidence = smoothed_confidence
 
-        confidence_valid = smoothed_confidence >= self.confidence_threshold
+        confidence_valid = self._confidence_is_valid(smoothed_confidence)
         appearance_valid = self._appearance_is_valid()
         if not self._candidate_is_confirmed(confidence_valid and appearance_valid):
             logger.debug(
@@ -473,7 +477,7 @@ class CSRTTracker(BaseTracker):
         self.confidence = smoothed_confidence
 
         candidate_valid = (
-            smoothed_confidence >= self.confidence_threshold
+            self._confidence_is_valid(smoothed_confidence)
             and self._appearance_is_valid()
             and motion_valid
             and scale_valid

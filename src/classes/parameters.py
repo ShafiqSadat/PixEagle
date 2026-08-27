@@ -124,6 +124,7 @@ class Parameters(metaclass=_ParametersMeta):
         'GimbalTracker',
         'ClassicTracker_Common',
         'CSRT_Tracker', 'KCF_Tracker', 'DLIB_Tracker', 'SparseFlow_Tracker',
+        'VitTrack_Tracker', 'DaSiamRPN_Tracker',
         'SmartTracker'
     ]
 

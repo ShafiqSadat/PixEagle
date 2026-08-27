@@ -87,6 +87,19 @@ Run `make install-tracker-artifacts` if setup marked its small pinned model
 unavailable. Compare native score, combined confidence, false locks, and latency
 against the same clip and initial ROI used for CSRT and Sparse Flow.
 
+### DaSiamRPN
+
+Use DaSiamRPN when a heavier distractor-aware model fits the target computer:
+
+```yaml
+Tracking:
+  DEFAULT_TRACKING_ALGORITHM: "DaSiamRPN"
+```
+
+Install its three pinned artifacts with `make install-dasiamrpn-artifacts`.
+Compare native low-score intervals, reacquisition, identity switches, and p95
+latency. Do not lower the native threshold merely to keep a visible box.
+
 ### dlib
 
 Use dlib only after the optional runtime passes its capability check:
@@ -172,6 +185,22 @@ VitTrack_Tracker:
 The native threshold controls OpenCV proposals; the combined threshold also
 includes PixEagle motion and appearance evidence. Tune them separately and keep
 ambiguous recovery fail-closed.
+
+### DaSiamRPN Model And Validation
+
+```yaml
+DaSiamRPN_Tracker:
+  native_score_threshold: 0.20
+  model_score_weight: 0.80
+  confidence_threshold: 0.35
+  max_motion_per_frame: 0.65
+  max_scale_change_per_frame: 0.65
+  validation_consensus_frames: 3
+```
+
+The native score remains a hard gate even if the combined confidence threshold
+is lowered. `backend_id` and `target_id` are advanced OpenCV DNN controls; keep
+the portable defaults unless an exact target benchmark proves another backend.
 
 ### dlib PSR and Motion
 

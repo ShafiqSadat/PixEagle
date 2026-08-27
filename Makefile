@@ -21,7 +21,7 @@
 .PHONY: help init repair setup-status demo run dev stop stop-legacy clean update reset-config setup-profile quick-browser-demo quick-browser-demo-cleanup \
         qgc-video-profile qgc-direct-media-profile demo-lan-browser-profile unsafe-demo-lan-media-profile production-remote-profile status logs \
         check-gstreamer-runtime managed-sih-doctor follower-contract-test \
-        download-binaries binary-download-plan install-tracker-artifacts tracker-artifact-plan service-install service-uninstall service-enable \
+        download-binaries binary-download-plan install-tracker-artifacts tracker-artifact-plan install-dasiamrpn-artifacts dasiamrpn-artifact-plan service-install service-uninstall service-enable \
         service-disable service-status service-logs service-attach phase0-check \
         sitl-dry-run sitl-probe sitl-sih-dry-run sitl-sih-probe \
         sitl-sih-execute-px4 sitl-gazebo-dry-run sitl-gazebo-probe \
@@ -59,6 +59,8 @@ help:
 	@echo "                            Install/verify model-backed classic tracker artifacts"
 	@echo "    make tracker-artifact-plan"
 	@echo "                            Preview pinned tracker model URLs/checksums"
+	@echo "    make install-dasiamrpn-artifacts"
+	@echo "                            Install/verify optional DaSiamRPN models (~155 MiB)"
 	@echo "    make setup-profile     Apply an explicit setup profile"
 	@echo "    make qgc-video-profile Configure field QGC video (GCS_HOST=<ip>)"
 	@echo "    make check-gstreamer-runtime"
@@ -172,6 +174,18 @@ install-tracker-artifacts:
 
 tracker-artifact-plan:
 	@$(PYTHON) scripts/setup/install-tracker-artifacts.py --dry-run
+
+install-dasiamrpn-artifacts:
+	@$(PYTHON) scripts/setup/install-tracker-artifacts.py \
+		--artifact opencv_dasiamrpn_model \
+		--artifact opencv_dasiamrpn_kernel_r1 \
+		--artifact opencv_dasiamrpn_kernel_cls1
+
+dasiamrpn-artifact-plan:
+	@$(PYTHON) scripts/setup/install-tracker-artifacts.py --dry-run \
+		--artifact opencv_dasiamrpn_model \
+		--artifact opencv_dasiamrpn_kernel_r1 \
+		--artifact opencv_dasiamrpn_kernel_cls1
 
 PROFILE ?= local_dev
 SETUP_PROFILE_ARGS ?=

@@ -1125,6 +1125,9 @@ sections:
         - value: VitTrack
           label: VitTrack
           description: Appearance-aware model tracking
+        - value: DaSiamRPN
+          label: DaSiamRPN
+          description: Distractor-aware model tracking
         - value: SparseFlow
           label: Sparse Flow
           description: Fast validated point-flow tracking
@@ -1751,6 +1754,235 @@ sections:
         type: integer
         default: 3
         description: Consecutive valid proposals to republish
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+    additional_properties: false
+  DaSiamRPN_Tracker:
+    display_name: DaSiamRPN Tracker
+    category: tracking
+    icon: track_changes
+    parameters:
+      performance_mode:
+        type: string
+        default: robust
+        description: performance_mode parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+      model_artifact_id:
+        type: string
+        default: opencv_dasiamrpn_model
+        description: Checksum-pinned DaSiamRPN network artifact
+        reload_tier: tracker_restart
+        reboot_required: false
+        options:
+        - value: opencv_dasiamrpn_model
+          label: OpenCV DaSiamRPN network
+          description: OpenCV sample / DaSiamRPN authors; MIT
+      model_path_override:
+        type: string
+        default: ''
+        description: Optional custom network path under models/; also set its SHA-256
+        reload_tier: tracker_restart
+        reboot_required: false
+      model_sha256_override:
+        type: string
+        default: ''
+        description: Required SHA-256 for a custom DaSiamRPN network path
+        reload_tier: tracker_restart
+        reboot_required: false
+      model_max_bytes:
+        type: integer
+        default: 134217728
+        description: model_max_bytes parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1024
+        max: 268435456
+        unit: bytes
+      kernel_r1_artifact_id:
+        type: string
+        default: opencv_dasiamrpn_kernel_r1
+        description: Checksum-pinned DaSiamRPN regression-kernel artifact
+        reload_tier: tracker_restart
+        reboot_required: false
+        options:
+        - value: opencv_dasiamrpn_kernel_r1
+          label: OpenCV DaSiamRPN regression kernel
+          description: OpenCV sample / DaSiamRPN authors; MIT
+      kernel_r1_path_override:
+        type: string
+        default: ''
+        description: Optional custom regression-kernel path under models/; also set its SHA-256
+        reload_tier: tracker_restart
+        reboot_required: false
+      kernel_r1_sha256_override:
+        type: string
+        default: ''
+        description: Required SHA-256 for a custom regression-kernel path
+        reload_tier: tracker_restart
+        reboot_required: false
+      kernel_r1_max_bytes:
+        type: integer
+        default: 67108864
+        description: kernel_r1_max_bytes parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1024
+        max: 268435456
+        unit: bytes
+      kernel_cls1_artifact_id:
+        type: string
+        default: opencv_dasiamrpn_kernel_cls1
+        description: Checksum-pinned DaSiamRPN classification-kernel artifact
+        reload_tier: tracker_restart
+        reboot_required: false
+        options:
+        - value: opencv_dasiamrpn_kernel_cls1
+          label: OpenCV DaSiamRPN classification kernel
+          description: OpenCV sample / DaSiamRPN authors; MIT
+      kernel_cls1_path_override:
+        type: string
+        default: ''
+        description: Optional custom classification-kernel path under models/; also set its SHA-256
+        reload_tier: tracker_restart
+        reboot_required: false
+      kernel_cls1_sha256_override:
+        type: string
+        default: ''
+        description: Required SHA-256 for a custom classification-kernel path
+        reload_tier: tracker_restart
+        reboot_required: false
+      kernel_cls1_max_bytes:
+        type: integer
+        default: 33554432
+        description: kernel_cls1_max_bytes parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1024
+        max: 268435456
+        unit: bytes
+      backend_id:
+        type: integer
+        default: 0
+        description: OpenCV DNN backend numeric ID; zero selects the portable default
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      target_id:
+        type: integer
+        default: 0
+        description: OpenCV DNN target numeric ID; zero selects CPU
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      native_score_threshold:
+        type: float
+        default: 0.2
+        description: Reject uncertain native proposals
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      model_score_weight:
+        type: float
+        default: 0.8
+        description: Native score contribution
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      use_shared_appearance_validation:
+        type: boolean
+        default: false
+        description: Native distractor model is authoritative
+        reload_tier: tracker_restart
+        reboot_required: false
+      confidence_threshold:
+        type: float
+        default: 0.35
+        description: confidence_threshold parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      failure_threshold:
+        type: integer
+        default: 5
+        description: failure_threshold parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      confidence_smoothing:
+        type: float
+        default: 0.55
+        description: confidence_smoothing parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      validation_start_frame:
+        type: integer
+        default: 5
+        description: validation_start_frame parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      max_scale_change_per_frame:
+        type: float
+        default: 0.65
+        description: max_scale_change_per_frame parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      max_motion_per_frame:
+        type: float
+        default: 0.65
+        description: max_motion_per_frame parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      appearance_learning_rate:
+        type: float
+        default: 0.03
+        description: appearance_learning_rate parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      appearance_update_min_confidence:
+        type: float
+        default: 0.7
+        description: appearance_update_min_confidence parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      enable_multiframe_validation:
+        type: boolean
+        default: true
+        description: enable_multiframe_validation parameter
+        reload_tier: tracker_restart
+        reboot_required: false
+      validation_consensus_frames:
+        type: integer
+        default: 3
+        description: ==============================================================================
         reload_tier: tracker_restart
         reboot_required: false
         min: 0

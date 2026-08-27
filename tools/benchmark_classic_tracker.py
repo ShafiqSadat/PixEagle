@@ -128,6 +128,7 @@ def _ensure_tracker_config(tracker_name: str) -> str:
     section = {
         "SparseFlow": "SparseFlow_Tracker",
         "VitTrack": "VitTrack_Tracker",
+        "DaSiamRPN": "DaSiamRPN_Tracker",
     }.get(tracker_name)
     if section is None or hasattr(Parameters, section):
         return "runtime_config"
@@ -295,7 +296,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument(
         "--tracker",
-        choices=("CSRT", "KCF", "SparseFlow", "VitTrack", "dlib"),
+        choices=("CSRT", "KCF", "SparseFlow", "VitTrack", "DaSiamRPN", "dlib"),
         default="SparseFlow",
     )
     parser.add_argument("--bbox", type=parse_bbox, required=True)

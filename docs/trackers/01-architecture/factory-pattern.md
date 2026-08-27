@@ -28,12 +28,14 @@ from classes.trackers.gimbal_tracker import GimbalTracker
 from classes.trackers.dlib_tracker import DlibTracker
 from classes.trackers.sparse_flow_tracker import SparseFlowTracker
 from classes.trackers.vittrack_tracker import VitTrackTracker
+from classes.trackers.dasiamrpn_tracker import DaSiamRPNTracker
 
 TRACKER_REGISTRY = {
     "CSRT": CSRTTracker,
     "KCF": KCFKalmanTracker,
     "SparseFlow": SparseFlowTracker,
     "VitTrack": VitTrackTracker,
+    "DaSiamRPN": DaSiamRPNTracker,
     "dlib": DlibTracker,
     "Gimbal": GimbalTracker,
 }
@@ -54,7 +56,7 @@ def create_tracker(algorithm: str,
     Factory function to create tracker instances.
 
     Args:
-        algorithm (str): Tracker name ("CSRT", "KCF", "SparseFlow", "VitTrack", "dlib", "Gimbal")
+        algorithm (str): Tracker name from the schema-backed registry
         video_handler: Video streaming handler
         detector: Feature detector for appearance
         app_controller: Main application controller

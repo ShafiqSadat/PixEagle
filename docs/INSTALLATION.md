@@ -216,6 +216,12 @@ question for this small Core capability. It never overwrites a mismatched file;
 other trackers remain available and `make install-tracker-artifacts` provides
 the focused repair path.
 
+DaSiamRPN is a separate opt-in tracker because its three verified model files
+total about 155 MiB. Guided setup asks one default-No question and updates reuse
+exact verified files. Install or repair it later with
+`make install-dasiamrpn-artifacts`; inspect the immutable plan first with
+`make dasiamrpn-artifact-plan`.
+
 For OpenCV/GStreamer, the live reuse gate requires the builder's current exact
 OpenCV version, a source provider inside the selected PixEagle venv, GStreamer,
 FFmpeg, CSRT, and KCF. A matching provider is reused without downloading or
@@ -438,6 +444,7 @@ separately configured TLS reverse proxy and target receiver validation.
 | Full profile | Explicit opt-in | AI/YOLO dependencies plus NCNN/pnnx model-export tooling | Add a trusted detect/OBB model and run `check-ai-runtime.sh --require-smart-tracker`; request NCNN only for a measured CPU/edge need |
 | Custom OpenCV + GStreamer | Optional, never forced | GStreamer input or QGC H.264/RTP/UDP output | Build and verify with the canonical scripts; init preserves it by default |
 | dlib tracker | Optional manual step | Fast correlation-filter tracker experiments | `bash scripts/setup/install-dlib.sh` |
+| DaSiamRPN tracker | Optional; default No | Heavier distractor-aware classic tracking experiments | Accept its setup prompt or run `make install-dasiamrpn-artifacts`; benchmark on the target computer |
 | Bash `pixeagle` shortcut | Guided default Yes; current-user profile only | Quickly change to the installed project directory; `pixeagle help` shows explicit start commands | Accept its prompt, or run `bash scripts/setup/install-shell-shortcut.sh`; remove with `--remove` |
 | Browser quick demo | Final one-line-installer choice, or explicit command | Select a listed interface address, press Enter for the primary route, enter `l` for authenticated loopback, or `c` for a custom address; every choice keeps `admin/admin` when Enter is pressed; a public IP is labeled temporary plain HTTP | Accept the final bootstrap prompt, or run `make quick-browser-demo LAN_HOST=<host>`; use `DEMO_CREDENTIAL_MODE=generated` for a one-time password; network cleanup includes `CLOSE_FIREWALL=1`, while loopback creates no firewall rule |
 | Service controls | Guided default Yes; unit installed disabled and runtime remains stopped | Install `pixeagle-service` for on-demand managed start without silently enabling boot or SSH-login behavior | Accept the prompt, or run `sudo bash scripts/service/install.sh`; `start`, boot `enable`/`disable`, and login hints remain independent |

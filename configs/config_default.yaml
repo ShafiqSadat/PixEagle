@@ -349,6 +349,7 @@ TrackerSafety:
 # CLASSIC TRACKER COMMON SETTINGS
 # ==============================================================================
 # Shared defaults for all classic trackers (CSRT, KCF, Sparse Flow, VitTrack,
+# DaSiamRPN,
 # dlib). Individual tracker sections override these values when set.
 ClassicTracker_Common:
   appearance_update_min_confidence: 0.55  # Minimum confidence for appearance updates
@@ -463,6 +464,47 @@ VitTrack_Tracker:
   appearance_update_min_confidence: 0.60  # Withhold updates below this confidence
   enable_multiframe_validation: true      # Require consensus after a rejection
   validation_consensus_frames: 3          # Consecutive valid proposals to republish
+
+# ==============================================================================
+# DASIAMRPN CONFIGURATION (optional OpenCV model-backed classic tracker)
+# ==============================================================================
+# DaSiamRPN uses a distractor-aware Siamese network and three checksum-pinned
+# ONNX artifacts. It is more robust than lightweight trackers on rapid camera
+# motion, but its 155 MiB artifact set and inference cost make it opt-in.
+DaSiamRPN_Tracker:
+  performance_mode: "robust"
+
+  model_artifact_id: "opencv_dasiamrpn_model"
+  model_path_override: ""
+  model_sha256_override: ""
+  model_max_bytes: 134217728
+
+  kernel_r1_artifact_id: "opencv_dasiamrpn_kernel_r1"
+  kernel_r1_path_override: ""
+  kernel_r1_sha256_override: ""
+  kernel_r1_max_bytes: 67108864
+
+  kernel_cls1_artifact_id: "opencv_dasiamrpn_kernel_cls1"
+  kernel_cls1_path_override: ""
+  kernel_cls1_sha256_override: ""
+  kernel_cls1_max_bytes: 33554432
+
+  backend_id: 0                           # OpenCV DNN backend; 0 selects default
+  target_id: 0                            # OpenCV DNN target; 0 selects CPU
+  native_score_threshold: 0.20            # Reject uncertain native proposals
+  model_score_weight: 0.80                # Native score contribution
+  use_shared_appearance_validation: false # Native distractor model is authoritative
+
+  confidence_threshold: 0.35
+  failure_threshold: 5
+  confidence_smoothing: 0.55
+  validation_start_frame: 5
+  max_scale_change_per_frame: 0.65
+  max_motion_per_frame: 0.65
+  appearance_learning_rate: 0.03
+  appearance_update_min_confidence: 0.70
+  enable_multiframe_validation: true
+  validation_consensus_frames: 3
 
 # ==============================================================================
 # SPARSE FLOW TRACKER CONFIGURATION

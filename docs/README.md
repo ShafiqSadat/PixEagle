@@ -54,7 +54,7 @@ Comprehensive documentation for the object tracking system.
 |-------|-------------|
 | [Tracker Overview](trackers/README.md) | Complete tracker system guide |
 | [Architecture](trackers/01-architecture/README.md) | BaseTracker, factory, TrackerOutput |
-| [Tracker Reference](trackers/02-reference/README.md) | CSRT, KCF, Sparse Flow, VitTrack, dlib, Gimbal, SmartTracker |
+| [Tracker Reference](trackers/02-reference/README.md) | CSRT, KCF, Sparse Flow, VitTrack, DaSiamRPN, dlib, Gimbal, SmartTracker |
 | [AI Concepts](trackers/03-ai-concepts/README.md) | YOLO, ByteTrack, motion prediction |
 | [Configuration](trackers/04-configuration/README.md) | Schema, parameters, tuning |
 | [Development Guide](trackers/05-development/README.md) | Creating custom trackers |

@@ -60,6 +60,7 @@ SECTION_CATEGORIES = {
     'DLIB_Tracker': {'category': 'tracking', 'display_name': 'dlib Tracker', 'icon': 'track_changes'},
     'SparseFlow_Tracker': {'category': 'tracking', 'display_name': 'Sparse Flow Tracker', 'icon': 'track_changes'},
     'VitTrack_Tracker': {'category': 'tracking', 'display_name': 'VitTrack Tracker', 'icon': 'track_changes'},
+    'DaSiamRPN_Tracker': {'category': 'tracking', 'display_name': 'DaSiamRPN Tracker', 'icon': 'track_changes'},
     'ClassicTracker_Common': {'category': 'tracking', 'display_name': 'Classic Tracker Common', 'icon': 'tune'},
     'SmartTracker': {'category': 'tracking', 'display_name': 'Smart Tracker (YOLO)', 'icon': 'smart_toy'},
     'GimbalTracker': {'category': 'tracking', 'display_name': 'Gimbal Tracker', 'icon': 'control_camera'},
@@ -231,7 +232,9 @@ def load_follower_config_options() -> List[Dict[str, str]]:
     return options
 
 
-def load_tracker_artifact_options() -> List[Dict[str, str]]:
+def load_tracker_artifact_options(
+    *, tracker: str, role: str
+) -> List[Dict[str, str]]:
     """Build tracker-model choices from the checked-in artifact registry."""
     repo_root = Path(__file__).resolve().parents[1]
     manifest_path = repo_root / 'configs' / 'tracker_artifacts.json'
@@ -243,6 +246,8 @@ def load_tracker_artifact_options() -> List[Dict[str, str]]:
     for artifact_id, record in artifacts.items():
         if not isinstance(record, dict) or not isinstance(record.get('name'), str):
             raise ValueError(f'Invalid tracker artifact record: {artifact_id!r}')
+        if record.get('tracker') != tracker or record.get('role') != role:
+            continue
         options.append({
             'value': artifact_id,
             'label': record['name'],
@@ -258,7 +263,7 @@ def load_tracker_artifact_options() -> List[Dict[str, str]]:
 # Applied AFTER auto-generation. Keys are "SectionName.PARAM_NAME".
 SCHEMA_OVERRIDES = {
     'VitTrack_Tracker.artifact_id': {
-        'options': load_tracker_artifact_options(),
+        'options': load_tracker_artifact_options(tracker='VitTrack', role='model'),
         'description': 'Checksum-pinned model entry from configs/tracker_artifacts.json',
     },
     'VitTrack_Tracker.model_path_override': {
@@ -283,6 +288,61 @@ SCHEMA_OVERRIDES = {
         'description': 'OpenCV DNN backend numeric ID; zero selects the portable default',
     },
     'VitTrack_Tracker.target_id': {
+        'min': 0,
+        'max': 100,
+        'description': 'OpenCV DNN target numeric ID; zero selects CPU',
+    },
+    'DaSiamRPN_Tracker.model_artifact_id': {
+        'options': load_tracker_artifact_options(tracker='DaSiamRPN', role='model'),
+        'description': 'Checksum-pinned DaSiamRPN network artifact',
+    },
+    'DaSiamRPN_Tracker.kernel_r1_artifact_id': {
+        'options': load_tracker_artifact_options(tracker='DaSiamRPN', role='kernel_r1'),
+        'description': 'Checksum-pinned DaSiamRPN regression-kernel artifact',
+    },
+    'DaSiamRPN_Tracker.kernel_cls1_artifact_id': {
+        'options': load_tracker_artifact_options(tracker='DaSiamRPN', role='kernel_cls1'),
+        'description': 'Checksum-pinned DaSiamRPN classification-kernel artifact',
+    },
+    'DaSiamRPN_Tracker.model_path_override': {
+        'description': 'Optional custom network path under models/; also set its SHA-256',
+    },
+    'DaSiamRPN_Tracker.kernel_r1_path_override': {
+        'description': 'Optional custom regression-kernel path under models/; also set its SHA-256',
+    },
+    'DaSiamRPN_Tracker.kernel_cls1_path_override': {
+        'description': 'Optional custom classification-kernel path under models/; also set its SHA-256',
+    },
+    'DaSiamRPN_Tracker.model_sha256_override': {
+        'description': 'Required SHA-256 for a custom DaSiamRPN network path',
+    },
+    'DaSiamRPN_Tracker.kernel_r1_sha256_override': {
+        'description': 'Required SHA-256 for a custom regression-kernel path',
+    },
+    'DaSiamRPN_Tracker.kernel_cls1_sha256_override': {
+        'description': 'Required SHA-256 for a custom classification-kernel path',
+    },
+    'DaSiamRPN_Tracker.model_max_bytes': {
+        'min': 1024,
+        'max': 268435456,
+        'unit': 'bytes',
+    },
+    'DaSiamRPN_Tracker.kernel_r1_max_bytes': {
+        'min': 1024,
+        'max': 268435456,
+        'unit': 'bytes',
+    },
+    'DaSiamRPN_Tracker.kernel_cls1_max_bytes': {
+        'min': 1024,
+        'max': 268435456,
+        'unit': 'bytes',
+    },
+    'DaSiamRPN_Tracker.backend_id': {
+        'min': 0,
+        'max': 100,
+        'description': 'OpenCV DNN backend numeric ID; zero selects the portable default',
+    },
+    'DaSiamRPN_Tracker.target_id': {
         'min': 0,
         'max': 100,
         'description': 'OpenCV DNN target numeric ID; zero selects CPU',
@@ -1240,6 +1300,7 @@ SECTION_RELOAD_TIERS = {
     'DLIB_Tracker': 'tracker_restart',
     'SparseFlow_Tracker': 'tracker_restart',
     'VitTrack_Tracker': 'tracker_restart',
+    'DaSiamRPN_Tracker': 'tracker_restart',
     'GimbalTracker': 'tracker_restart',
     'GimbalTrackerSettings': 'tracker_restart',
     'Detector': 'tracker_restart',

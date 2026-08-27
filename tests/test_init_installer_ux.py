@@ -525,7 +525,7 @@ printf 'PROFILE=%s OPTIONAL=%s\n' "$INSTALL_PROFILE" "$OPTIONAL_COMPONENT_SELECT
         ["script", "-qfec", f"bash -c {shlex.quote(child)}", "/dev/null"],
         cwd=PROJECT_ROOT,
         env=env,
-        input="\n\n\n\n",
+        input="\n\n\n\n\n",
         capture_output=True,
         text=True,
         check=False,
@@ -534,6 +534,7 @@ printf 'PROFILE=%s OPTIONAL=%s\n' "$INSTALL_PROFILE" "$OPTIONAL_COMPONENT_SELECT
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PROFILE=core OPTIONAL=shell-shortcut" in result.stdout
+    assert "Install DaSiamRPN tracker models (~155 MiB)? [y/N]:" in result.stdout
     assert "Install pixeagle-service command now?" not in result.stdout
     assert "pixeagle() {" in (home / ".bashrc").read_text(encoding="utf-8")
 
@@ -1749,7 +1750,7 @@ def test_optional_selection_is_normalized_and_rejects_unknown_values():
     accepted = _run_bash(
         f'''
 source "{INIT_SCRIPT}"
-normalize_optional_component_selection "1, gstreamer, 3, dlib"
+normalize_optional_component_selection "1, gstreamer, 3, dlib, 4"
 printf 'SELECTION=%s\n' "$OPTIONAL_COMPONENT_SELECTION"
 '''
     )
@@ -1780,7 +1781,7 @@ normalize_optional_component_selection "service"
     )
 
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
-    assert "SELECTION=dlib,gstreamer,shell-shortcut" in accepted.stdout
+    assert "SELECTION=dlib,gstreamer,shell-shortcut,dasiamrpn" in accepted.stdout
     assert rejected.returncode != 0
     assert "Unknown optional component" in rejected.stdout
     assert none_selected.returncode == 0, none_selected.stdout + none_selected.stderr
@@ -1788,7 +1789,7 @@ normalize_optional_component_selection "service"
     assert ambiguous.returncode != 0
     assert "cannot be combined" in ambiguous.stdout
     assert retired_service_option.returncode != 0
-    assert "Allowed: dlib,gstreamer,shell-shortcut" in retired_service_option.stdout
+    assert "Allowed: dlib,dasiamrpn,gstreamer,shell-shortcut" in retired_service_option.stdout
 
 
 def test_optional_gstreamer_reuses_verified_existing_provider():

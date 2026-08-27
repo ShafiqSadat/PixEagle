@@ -12,7 +12,7 @@ overrides belong in `configs/config.yaml`; both are validated by the generated
 
 ```yaml
 Tracking:
-  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, VitTrack, dlib, Gimbal
+  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # Options come from the tracker catalog
   CENTER_HISTORY_LENGTH: 10
   MOTION_CONFIDENCE_WEIGHT: 0.5
   APPEARANCE_CONFIDENCE_WEIGHT: 0.5
@@ -71,7 +71,8 @@ CSRT_Tracker:
   appearance_learning_rate: 0.1
 ```
 
-For CSRT, KCF, Sparse Flow, VitTrack, and dlib, `failure_threshold` controls when repeated rejected
+For CSRT, KCF, Sparse Flow, VitTrack, DaSiamRPN, and dlib,
+`failure_threshold` controls when repeated rejected
 measurements are reported as a confirmed loss. It is not a command-validity
 grace period: the first rejected measurement is immediately stale and unusable
 for following.
@@ -136,6 +137,31 @@ The artifact registry supplies the default path, digest, provenance, and
 license. Advanced model overrides require both an owner-controlled path under
 `models/` and its SHA-256. See the
 [VitTrack reference](../02-reference/vittrack-tracker.md).
+
+---
+
+## DaSiamRPN Tracker
+
+```yaml
+DaSiamRPN_Tracker:
+  model_artifact_id: "opencv_dasiamrpn_model"
+  kernel_r1_artifact_id: "opencv_dasiamrpn_kernel_r1"
+  kernel_cls1_artifact_id: "opencv_dasiamrpn_kernel_cls1"
+  backend_id: 0
+  target_id: 0
+  native_score_threshold: 0.20
+  model_score_weight: 0.80
+  use_shared_appearance_validation: false
+  confidence_threshold: 0.35
+  max_motion_per_frame: 0.65
+  max_scale_change_per_frame: 0.65
+  validation_consensus_frames: 3
+```
+
+Each custom artifact path requires its matching SHA-256 override. The native
+score is always a hard gate; `model_score_weight` controls only the confidence
+blend above that gate. See the
+[DaSiamRPN reference](../02-reference/dasiamrpn-tracker.md).
 
 ---
 

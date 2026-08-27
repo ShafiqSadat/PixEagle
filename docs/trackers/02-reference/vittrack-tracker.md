@@ -5,8 +5,9 @@ VitTrack supplies each frame's bounding-box proposal and native confidence;
 PixEagle applies the same freshness, motion, scale, appearance, estimator, and
 bounded recovery contracts used by the other classic trackers.
 
-It is useful as an appearance-aware comparison candidate for blur, viewpoint
-change, and dynamic aerial scenes. It is still a short-term tracker. It cannot
+It is useful as a lightweight appearance-aware comparison candidate. On the
+supplied road-to-grass replay it drifted at the background transition, so it is
+not the preferred candidate for that scene. It is still a short-term tracker. It cannot
 prove physical identity through a full disappearance or among visually
 indistinguishable targets.
 

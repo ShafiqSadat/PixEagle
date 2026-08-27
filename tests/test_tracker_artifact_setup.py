@@ -64,6 +64,20 @@ def test_checked_in_tracker_artifact_manifest_is_pinned_and_licensed():
     assert record["license"] == "Apache-2.0"
     assert "/main/" not in record["url"]
 
+    dasiamrpn = {
+        artifact_id: artifact
+        for artifact_id, artifact in payload["artifacts"].items()
+        if artifact.get("tracker") == "DaSiamRPN"
+    }
+    assert set(dasiamrpn) == {
+        "opencv_dasiamrpn_model",
+        "opencv_dasiamrpn_kernel_r1",
+        "opencv_dasiamrpn_kernel_cls1",
+    }
+    assert sum(item["size_bytes"] for item in dasiamrpn.values()) == 161851280
+    assert all(item["install_by_default"] is False for item in dasiamrpn.values())
+    assert all(item["license"] == "MIT" for item in dasiamrpn.values())
+
 
 def test_artifact_installer_downloads_atomically_and_reuses_verified_file(tmp_path):
     payload = b"verified-tracker-model"
@@ -136,6 +150,32 @@ def test_custom_artifact_requires_matching_path_and_digest(tmp_path):
         )
 
 
+def test_named_artifact_fields_support_multi_file_trackers(tmp_path):
+    payload = b"custom-kernel"
+    _write_project(tmp_path, b"manifest-model")
+    model = tmp_path / "models" / "custom" / "kernel.onnx"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(payload)
+
+    resolved = resolve_tracker_artifact(
+        {
+            "kernel_artifact_id": "test_artifact",
+            "kernel_path": "models/custom/kernel.onnx",
+            "kernel_sha256": hashlib.sha256(payload).hexdigest(),
+            "kernel_max_bytes": 1024,
+        },
+        project_root=tmp_path,
+        artifact_id_field="kernel_artifact_id",
+        path_override_field="kernel_path",
+        digest_override_field="kernel_sha256",
+        max_bytes_field="kernel_max_bytes",
+        default_artifact_id="test_artifact",
+    )
+
+    assert resolved.artifact_id == "custom"
+    assert resolved.path == model
+
+
 def test_setup_surfaces_one_nonfatal_vittrack_repair_command():
     init_text = (PROJECT_ROOT / "scripts" / "init.sh").read_text(encoding="utf-8")
     makefile = (PROJECT_ROOT / "Makefile").read_text(encoding="utf-8")
@@ -144,3 +184,5 @@ def test_setup_surfaces_one_nonfatal_vittrack_repair_command():
     assert "VitTrack unavailable; other trackers remain usable" in init_text
     assert "make install-tracker-artifacts" in init_text
     assert "install-tracker-artifacts:" in makefile
+    assert "install-dasiamrpn-artifacts:" in makefile
+    assert "Install DaSiamRPN tracker models (~155 MiB)? [y/N]:" in init_text

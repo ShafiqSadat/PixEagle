@@ -87,6 +87,8 @@ CLASSIC_TRACKER_ARTIFACT_STATE="pending"
 CLASSIC_TRACKER_ARTIFACT_DETAIL="not checked"
 OPTIONAL_DLIB_STATE="skipped"
 OPTIONAL_DLIB_DETAIL="not selected"
+OPTIONAL_DASIAMRPN_STATE="skipped"
+OPTIONAL_DASIAMRPN_DETAIL="not selected"
 OPTIONAL_GSTREAMER_STATE="skipped"
 OPTIONAL_GSTREAMER_DETAIL="not selected"
 OPTIONAL_SHORTCUT_STATE="skipped"
@@ -1995,6 +1997,8 @@ show_bootstrap_summary() {
     if [[ -n "${OPTIONAL_COMPONENT_SELECTION:-}" ]]; then
         optional_component_selected dlib && \
             summary_status_line "$OPTIONAL_DLIB_STATE" "dlib tracker" "$OPTIONAL_DLIB_DETAIL"
+        optional_component_selected dasiamrpn && \
+            summary_status_line "$OPTIONAL_DASIAMRPN_STATE" "DaSiamRPN tracker" "$OPTIONAL_DASIAMRPN_DETAIL"
         optional_component_selected gstreamer && \
             summary_status_line "$OPTIONAL_GSTREAMER_STATE" "OpenCV GStreamer" "$OPTIONAL_GSTREAMER_DETAIL"
         optional_component_selected shell-shortcut && \
@@ -2046,6 +2050,8 @@ show_summary() {
         echo -e "   ${CYAN}${BOLD}Selected optional components:${NC}"
         optional_component_selected dlib && \
             summary_status_line "$OPTIONAL_DLIB_STATE" "dlib tracker backend" "$OPTIONAL_DLIB_DETAIL"
+        optional_component_selected dasiamrpn && \
+            summary_status_line "$OPTIONAL_DASIAMRPN_STATE" "DaSiamRPN tracker" "$OPTIONAL_DASIAMRPN_DETAIL"
         optional_component_selected gstreamer && \
             summary_status_line "$OPTIONAL_GSTREAMER_STATE" "OpenCV GStreamer provider" "$OPTIONAL_GSTREAMER_DETAIL"
         optional_component_selected shell-shortcut && \
@@ -2301,10 +2307,11 @@ normalize_optional_component_selection() {
             1|dlib) token="dlib" ;;
             2|gstreamer|opencv-gstreamer) token="gstreamer" ;;
             3|shortcut|shell-shortcut) token="shell-shortcut" ;;
+            4|dasiamrpn|dasiam-rpn) token="dasiamrpn" ;;
             none) continue ;;
             *)
                 log_error "Unknown optional component: $token"
-                log_detail "Allowed: dlib,gstreamer,shell-shortcut"
+                log_detail "Allowed: dlib,dasiamrpn,gstreamer,shell-shortcut"
                 return 1
                 ;;
         esac
@@ -2327,6 +2334,9 @@ configure_optional_components() {
         if ask_yes_no "   Install the optional dlib tracker backend? [y/N]: " "n"; then
             selection="dlib"
         fi
+        if ask_yes_no "   Install DaSiamRPN tracker models (~155 MiB)? [y/N]: " "n"; then
+            selection="${selection:+$selection,}dasiamrpn"
+        fi
         if ask_yes_no "   Build OpenCV with GStreamer support (large source build)? [y/N]: " "n"; then
             selection="${selection:+$selection,}gstreamer"
         fi
@@ -2335,7 +2345,7 @@ configure_optional_components() {
         fi
     elif [[ -z "$selection" ]]; then
         log_info "No controlling terminal is available; optional components were not changed"
-        log_detail "Use PIXEAGLE_OPTIONAL_COMPONENTS=dlib,gstreamer,shell-shortcut with an explicit unattended run."
+        log_detail "Use PIXEAGLE_OPTIONAL_COMPONENTS=dlib,dasiamrpn,gstreamer,shell-shortcut with an explicit unattended run."
         log_detail "Install a standalone service explicitly with: sudo bash scripts/service/install.sh"
     fi
 
@@ -2354,6 +2364,23 @@ configure_optional_components() {
         else
             OPTIONAL_DLIB_STATE="degraded"
             OPTIONAL_DLIB_DETAIL="dlib setup failed; Core/Full installation remains intact"
+            optional_status=1
+        fi
+    fi
+
+    if optional_component_selected dasiamrpn; then
+        OPTIONAL_DASIAMRPN_STATE="pending"
+        OPTIONAL_DASIAMRPN_DETAIL="artifact verification started"
+        if "$VENV_PYTHON" "$SCRIPTS_DIR/setup/install-tracker-artifacts.py" \
+            --project-root "$PIXEAGLE_DIR" \
+            --artifact opencv_dasiamrpn_model \
+            --artifact opencv_dasiamrpn_kernel_r1 \
+            --artifact opencv_dasiamrpn_kernel_cls1; then
+            OPTIONAL_DASIAMRPN_STATE="ready"
+            OPTIONAL_DASIAMRPN_DETAIL="three model artifacts installed and verified"
+        else
+            OPTIONAL_DASIAMRPN_STATE="degraded"
+            OPTIONAL_DASIAMRPN_DETAIL="model setup failed; other trackers remain usable"
             optional_status=1
         fi
     fi

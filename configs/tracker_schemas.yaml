@@ -336,6 +336,41 @@ tracker_types:
         - "Short-term aerial tracking with bounded detector recovery"
         - "Comparison with Sparse Flow and CSRT on representative media"
 
+  DaSiamRPNTracker:
+    name: "DaSiamRPN Tracker"
+    description: "Distractor-aware OpenCV Siamese tracking with native confidence"
+    supported_schemas:
+      - POSITION_2D
+      - BBOX_CONFIDENCE
+      - VELOCITY_AWARE
+    capabilities:
+      - model_backed_tracking
+      - native_tracking_confidence
+      - scale_adaptation
+      - distractor_awareness
+      - tentative_candidate_validation
+    performance:
+      evidence_required: true
+      note: "Benchmark latency and target identity on the intended camera and computer; the verified artifact set is about 155 MiB"
+    notes:
+      - "Requires three checksum-verified model artifacts installed by the optional setup path"
+      - "Low native-confidence frames remain stale and command-ineligible while bounded recovery runs"
+      - "A short-term tracker cannot prove physical identity through full disappearance or ambiguous scene cuts"
+    ui_metadata:
+      display_name: "DaSiamRPN"
+      short_description: "Distractor-aware model tracking"
+      icon: "track_changes"
+      factory_key: "DaSiamRPN"
+      exclude_from_ui: false
+      performance_category: "scenario_dependent"
+      suitable_for:
+        - "Rapid camera motion and distractor-heavy scenes"
+        - "Appearance-changing aerial targets"
+        - "Systems that can afford a heavier CPU/model footprint"
+      recommended_scenarios:
+        - "Single-target aerial tracking with bounded detector recovery"
+        - "Comparison against VitTrack, Sparse Flow, and CSRT on representative media"
+
   SparseFlowTracker:
     name: "Sparse Flow Tracker"
     description: "High-rate classic point tracking with forward-backward and appearance validation"

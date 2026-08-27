@@ -35,7 +35,7 @@ This section covers the configuration system for trackers, including the YAML sc
 
 ```yaml
 Tracking:
-  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, VitTrack, dlib, Gimbal
+  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # Options come from the tracker catalog
 
 SmartTracker:
   SMART_TRACKER_ENABLED: true
