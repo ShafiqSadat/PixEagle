@@ -30,12 +30,9 @@ import {
   Chip,
   Alert,
   CircularProgress,
-  IconButton,
-  Tooltip,
   Skeleton
 } from '@mui/material';
 import {
-  TrackChanges,
   SwapHoriz,
   CheckCircle,
   Warning,
@@ -47,6 +44,8 @@ import {
   useSwitchTracker
 } from '../hooks/useTrackerSchema';
 import { useTrackerStatus } from '../hooks/useStatuses';
+import DocumentationLink, { PIXEAGLE_DOCS } from './DocumentationLink';
+import TrackerIcon from './TrackerIcon';
 
 // Loading skeleton component
 const LoadingSkeleton = () => (
@@ -159,7 +158,7 @@ const TrackerSelector = memo(({ executionMode = 'PX4' }) => {
     return Object.entries(trackers.available_trackers).map(([key, tracker]) => ({
       value: tracker.request_tracker_type || key,
       label: tracker.ui_metadata?.display_name || key,
-      icon: tracker.ui_metadata?.icon || '🎯',
+      icon: tracker.ui_metadata?.icon || 'track_changes',
       description: tracker.ui_metadata?.short_description || tracker.description || '',
       performance: tracker.ui_metadata?.performance_category || 'unknown',
       available: tracker.available !== false,
@@ -181,7 +180,7 @@ const TrackerSelector = memo(({ executionMode = 'PX4' }) => {
 
     return {
       displayName: currentTracker.display_name || currentTracker.tracker_type,
-      icon: currentTracker.icon || '🎯',
+      icon: currentTracker.icon || 'track_changes',
       status: currentTracker.status || 'configured',
       isTracking: trackerRuntimeStatus.activeTracking || false,
       description: currentTracker.short_description || currentTracker.description || '',
@@ -283,11 +282,10 @@ const TrackerSelector = memo(({ executionMode = 'PX4' }) => {
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
           Classic Tracker
         </Typography>
-        <Tooltip title="Select tracking algorithm">
-          <IconButton size="small">
-            <TrackChanges fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <DocumentationLink
+          href={PIXEAGLE_DOCS.classicTrackers}
+          label="Classic tracker guide"
+        />
       </Box>
 
       {catalogError && (
@@ -315,9 +313,10 @@ const TrackerSelector = memo(({ executionMode = 'PX4' }) => {
             />
           )}
           <Chip
-            label={`${currentTrackerInfo.icon} ${currentTrackerInfo.displayName}`}
+            label={currentTrackerInfo.displayName}
             color="primary"
             size="small"
+            icon={<TrackerIcon icon={currentTrackerInfo.icon} />}
             sx={{ height: 22, fontSize: 11 }}
           />
         </Box>
@@ -336,7 +335,9 @@ const TrackerSelector = memo(({ executionMode = 'PX4' }) => {
           {trackerOptions.map((option) => (
             <MenuItem key={option.value} value={option.value} disabled={!option.available}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                <span>{option.icon}</span>
+                <Box sx={{ width: 20, height: 20, flex: '0 0 20px', display: 'grid', placeItems: 'center' }}>
+                  <TrackerIcon icon={option.icon} sx={{ fontSize: 18 }} />
+                </Box>
                 <Box sx={{ minWidth: 0 }}>
                   <Typography variant="body2">{option.label}</Typography>
                   {!option.available && (

@@ -241,6 +241,7 @@ async def test_video_websocket_send_frames_emits_metadata_then_jpeg(monkeypatch)
     assert metadata["quality"] == 72
     assert metadata["size"] == len(b"jpeg-frame")
     assert metadata["frame_id"] == 42
+    assert metadata["frame_age_ms"] is None
     websocket.send_bytes.assert_awaited_once_with(b"jpeg-frame")
     handler.stream_optimizer.encode_frame_async.assert_awaited_once_with(
         stamped_frame.frame,
@@ -286,6 +287,83 @@ async def test_video_websocket_receive_quality_and_ping(monkeypatch):
     assert pong["type"] == "pong"
     assert pong["client_timestamp"] == 123.0
     assert "timestamp" in pong
+
+
+@pytest.mark.asyncio
+async def test_video_websocket_negotiates_latest_frame_ack_and_releases_exact_frame():
+    handler = _handler_for_lifecycle_tests()
+    handler.is_shutting_down = False
+    handler.quality_engine = SimpleNamespace(set_client_quality=MagicMock())
+    websocket = SimpleNamespace(
+        receive_json=AsyncMock(
+            side_effect=[
+                {"type": "stream_capabilities", "latest_frame_ack": True},
+                {"type": "frame_ack", "frame_id": 42},
+                {"type": "ping", "client_timestamp": 123.0},
+            ]
+        ),
+        send_json=AsyncMock(),
+    )
+    client = _client(client_id="ws-ack", connected_at=1.0, last_frame_time=0.0)
+    client.frame_in_flight_id = 42
+
+    async def stop_after_pong(_message):
+        handler.is_shutting_down = True
+
+    websocket.send_json.side_effect = stop_after_pong
+
+    await handler._ws_receive_messages(websocket, client)
+
+    assert client.latest_frame_ack_enabled is True
+    assert client.last_acknowledged_frame_id == 42
+    assert client.frame_in_flight_id is None
+    assert client.frame_ack_event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_video_websocket_waits_for_render_ack_before_sampling_next_frame(
+    monkeypatch,
+):
+    handler = _handler_for_lifecycle_tests()
+    handler.is_shutting_down = False
+    handler.frame_interval = 0
+    stamped_frames = [
+        SimpleNamespace(frame=object(), frame_id=42, timestamp=1.0),
+        SimpleNamespace(frame=object(), frame_id=43, timestamp=1.1),
+    ]
+    handler.frame_publisher = SimpleNamespace(
+        get_latest=MagicMock(side_effect=stamped_frames)
+    )
+    handler.stream_optimizer = SimpleNamespace(
+        encode_frame_async=AsyncMock(side_effect=[b"frame-42", b"frame-43"])
+    )
+    handler.quality_engine = SimpleNamespace(report_frame_sent=MagicMock(return_value=80))
+    monkeypatch.setattr("classes.fastapi_handler.Parameters.ENABLE_ADAPTIVE_QUALITY", False)
+    websocket = SimpleNamespace(send_json=AsyncMock(), send_bytes=AsyncMock())
+    client = _client(client_id="ws-bounded", connected_at=1.0, last_frame_time=0.0)
+    client.latest_frame_ack_enabled = True
+
+    async def stop_after_second_frame(payload):
+        if payload == b"frame-43":
+            handler.is_shutting_down = True
+
+    websocket.send_bytes.side_effect = stop_after_second_frame
+    sender = asyncio.create_task(handler._ws_send_frames(websocket, client))
+
+    for _ in range(20):
+        if websocket.send_bytes.await_count == 1:
+            break
+        await asyncio.sleep(0)
+    assert websocket.send_bytes.await_count == 1
+    await asyncio.sleep(0)
+    assert handler.frame_publisher.get_latest.call_count == 1
+
+    client.frame_in_flight_id = None
+    client.frame_ack_event.set()
+    await asyncio.wait_for(sender, timeout=1.0)
+
+    assert websocket.send_bytes.await_count == 2
+    assert handler.frame_publisher.get_latest.call_count == 2
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ import {
   useSwitchTracker
 } from '../hooks/useTrackerSchema';
 import { useTrackerStatus } from '../hooks/useStatuses';
+import { PIXEAGLE_DOCS } from './DocumentationLink';
 
 jest.mock('../hooks/useTrackerSchema', () => ({
   useAvailableTrackers: jest.fn(),
@@ -106,6 +107,41 @@ test('shows visible tracker output without implying follower usability', () => {
   expect(screen.getByText('Output Visible')).toBeInTheDocument();
   expect(screen.getByText('Not For Follow')).toBeInTheDocument();
   expect(screen.getAllByText(/External Gimbal/).length).toBeGreaterThan(0);
+  expect(screen.getByRole('link', { name: 'Classic tracker guide' })).toHaveAttribute(
+    'href',
+    PIXEAGLE_DOCS.classicTrackers
+  );
+});
+
+test('renders schema icon keys as icons instead of layout-breaking text', () => {
+  currentTrackerMock = {
+    ...currentTracker,
+    tracker_type: 'DaSiamRPNTracker',
+    display_name: 'DaSiamRPN',
+    icon: 'track_changes',
+  };
+  useAvailableTrackers.mockReturnValue({
+    trackers: {
+      available_trackers: {
+        ...availableTrackers.available_trackers,
+        DaSiamRPNTracker: {
+          ui_metadata: {
+            display_name: 'DaSiamRPN',
+            icon: 'track_changes',
+            short_description: 'Deep appearance tracker',
+            performance_category: 'deep_cpu',
+          },
+        },
+      },
+    },
+    loading: false,
+    error: null,
+  });
+
+  render(<TrackerSelector />);
+
+  expect(screen.getAllByText('DaSiamRPN').length).toBeGreaterThan(0);
+  expect(screen.queryByText('track_changes')).not.toBeInTheDocument();
 });
 
 test('shows stale runtime status from the typed tracker contract', () => {

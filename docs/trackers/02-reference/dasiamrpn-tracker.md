@@ -55,6 +55,9 @@ The native score is a hard gate. `model_score_weight` controls the confidence
 blend only after that gate passes. The default leaves shared template
 appearance validation off because the Siamese distractor model owns appearance;
 motion, scale, consensus, freshness, and application recovery remain active.
+Do not enable the second appearance gate without annotated scenario evidence;
+it can reject a valid target during a strong background transition even when
+the native model remains useful.
 
 Backend and target IDs are advanced OpenCV DNN controls. Keep the portable CPU
 defaults unless an exact hardware benchmark proves another combination.
@@ -67,10 +70,23 @@ from 500 updates. It rejected 39 native low-score frames around the difficult
 road-to-grass transition and subsequently resumed measured output. Median
 update latency was 81.0 ms and p95 was 88.4 ms on the tested x86_64 VPS.
 
+That adapter-only median already limits the theoretical tracker ceiling to
+about 12 updates per second before capture, recovery, OSD, JPEG encoding, API,
+and browser work. The portable defaults use OpenCV DNN on CPU, so DaSiamRPN is
+expected to be materially slower than the lighter classic candidates on many
+hosts. `REALTIME` file playback drops overdue frames rather than turning that
+load into slow-motion replay; deterministic replay intentionally does not.
+
 This unannotated replay is comparative software evidence only. It does not
 prove bounding-box accuracy, identity continuity, Raspberry Pi/Jetson cadence,
 camera performance, flight behavior, or field suitability. Benchmark the exact
 camera, target size, compression, motion, and computer before use.
+
+A confident shift to a similar vehicle or a strong road marking remains
+possible. Shared recovery rejects ambiguous detector candidates, but neither
+DaSiamRPN nor another short-term classic provider can prove physical identity
+after disappearance. That requires separately validated long-term proposal and
+ReID/tracklet association rather than scene-specific thresholds.
 
 ```bash
 PYTHONPATH=src .venv/bin/python tools/benchmark_classic_tracker.py \

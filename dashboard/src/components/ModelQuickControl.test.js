@@ -2,6 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ModelQuickControl from './ModelQuickControl';
+import { PIXEAGLE_DOCS } from './DocumentationLink';
 
 const mockSwitchModel = jest.fn();
 const mockRefetchActive = jest.fn();
@@ -72,6 +73,10 @@ describe('ModelQuickControl', () => {
     expect(await screen.findByText('Model selected for Smart Mode')).toBeInTheDocument();
     expect(mockRefetchActive).toHaveBeenCalledTimes(1);
     expect(mockRefetchModels).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('link', { name: 'Detection model guide' })).toHaveAttribute(
+      'href',
+      PIXEAGLE_DOCS.smartModels
+    );
   });
 
   test('shows an unavailable state without offering model selection', () => {

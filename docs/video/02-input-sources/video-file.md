@@ -65,6 +65,13 @@ filesrc location=/path/to/video.mp4
 clock-paced GStreamer source is not delayed a second time. Live camera and
 network sources retain their separate low-latency policies.
 
+The same timing contract applies when `REALTIME` uses the OpenCV file backend.
+After an overloaded processing cycle, PixEagle discards only the overdue local
+file frames before reading the next frame. It does not apply this catch-up path
+to cameras, network streams, GStreamer file playback, deterministic replay, or
+maximum-throughput benchmarking. This keeps an overloaded demo near the file's
+wall clock instead of replaying every stale frame in slow motion.
+
 ## Use Cases
 
 ### Testing Tracker Algorithms
@@ -115,7 +122,9 @@ validation injection boundary rather than treating a replay as a live camera.
 
 Playback state is available in video health/status as
 `video_file_playback_state`, `video_file_playback_epoch`, and
-`video_file_loop_count`.
+`video_file_loop_count`. OpenCV real-time replay also reports
+`video_file_realtime_skipped_frames`; skipped frames are expected when the full
+tracking/rendering workload cannot meet source FPS.
 
 ## Frame Properties
 

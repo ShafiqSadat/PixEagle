@@ -37,6 +37,7 @@ def mock_parameters():
         mock_params.CAPTURE_FPS = 30
         mock_params.DEFAULT_FPS = 30
         mock_params.USE_GSTREAMER = False
+        mock_params.PIPELINE_MODE = "REALTIME"
         mock_params.STORE_LAST_FRAMES = 5
         mock_params.OPENCV_BUFFER_SIZE = 1
         mock_params.USB_YUYV = (
@@ -326,6 +327,37 @@ class TestVideoFilePlaybackContract:
         assert cap.read.call_count == 1
         assert handler.get_frame_status()["reason"] == "video_file_replay_frame"
         assert handler.get_frame_status()["usable_for_following"] is False
+
+    def test_realtime_opencv_replay_discards_only_accumulated_overdue_frames(
+        self,
+        mock_parameters,
+    ):
+        with patch.object(VideoHandler, "init_video_source", return_value=33):
+            handler = VideoHandler()
+        cap = MagicMock()
+        cap.grab.return_value = True
+        handler.cap = cap
+        handler.fps = 30.0
+        handler._capture_mode = "video_file_opencv_primary"
+
+        first = handler.discard_realtime_video_file_backlog(198.0)
+        second = handler.discard_realtime_video_file_backlog(198.0)
+
+        assert first == 4
+        assert second == 5
+        assert cap.grab.call_count == 9
+        assert handler._video_file_realtime_skipped_frames == 9
+
+    def test_deterministic_replay_never_discards_capture_frames(self, mock_parameters):
+        mock_parameters.PIPELINE_MODE = "DETERMINISTIC_REPLAY"
+        with patch.object(VideoHandler, "init_video_source", return_value=33):
+            handler = VideoHandler()
+        cap = MagicMock()
+        handler.cap = cap
+        handler._capture_mode = "video_file_opencv_primary"
+
+        assert handler.discard_realtime_video_file_backlog(500.0) == 0
+        cap.grab.assert_not_called()
 
     def test_loop_boundary_is_unusable_before_next_epoch_frame(self, mock_parameters):
         frame = np.full((480, 640, 3), (40, 50, 60), dtype=np.uint8)

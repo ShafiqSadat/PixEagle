@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from fastapi import HTTPException, WebSocketDisconnect
@@ -39,6 +39,13 @@ class ClientConnection:
     frame_queue: deque[Any]
     websocket: Any = None
     principal: APIPrincipal | None = None
+    latest_frame_ack_enabled: bool = False
+    frame_in_flight_id: int | None = None
+    last_acknowledged_frame_id: int = -1
+    frame_ack_event: asyncio.Event = field(
+        default_factory=asyncio.Event,
+        repr=False,
+    )
 
 
 class SessionBoundStreamingResponse(StreamingResponse):

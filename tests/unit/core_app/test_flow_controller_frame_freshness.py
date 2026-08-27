@@ -36,6 +36,34 @@ def test_playback_epoch_change_resets_deterministic_pts_state():
     assert flow._last_frame_pts_ms is None
 
 
+def test_realtime_pipeline_delegates_replay_backlog_discard():
+    flow = object.__new__(FlowController)
+    flow._pipeline_mode = "REALTIME"
+    discard = MagicMock(return_value=4)
+    flow.controller = SimpleNamespace(
+        video_handler=SimpleNamespace(
+            discard_realtime_video_file_backlog=discard,
+        )
+    )
+
+    assert flow._discard_realtime_replay_backlog(190.0) == 4
+    discard.assert_called_once_with(190.0)
+
+
+def test_non_realtime_pipeline_preserves_capture_order():
+    flow = object.__new__(FlowController)
+    flow._pipeline_mode = "DETERMINISTIC_REPLAY"
+    discard = MagicMock()
+    flow.controller = SimpleNamespace(
+        video_handler=SimpleNamespace(
+            discard_realtime_video_file_backlog=discard,
+        )
+    )
+
+    assert flow._discard_realtime_replay_backlog(190.0) == 0
+    discard.assert_not_called()
+
+
 def test_main_loop_routes_hard_video_stall_to_app_controller():
     """No-frame iterations must still trigger fail-closed follow handling."""
     frame_status = {

@@ -110,6 +110,8 @@ class VideoHandler:
         self._video_file_expected_frame_count: Optional[int] = None
         self._video_file_rewind_strategy: Optional[str] = None
         self._video_file_ambiguous_failure_count = 0
+        self._video_file_realtime_skip_credit = 0.0
+        self._video_file_realtime_skipped_frames = 0
         
         # Current frame states
         self.current_raw_frame = None
@@ -242,6 +244,8 @@ class VideoHandler:
             self._video_file_expected_frame_count = None
             self._video_file_rewind_strategy = None
             self._video_file_ambiguous_failure_count = 0
+            self._video_file_realtime_skip_credit = 0.0
+            self._video_file_realtime_skipped_frames = 0
 
         if self._should_use_async_udp_capture():
             return self._initialize_async_udp_capture()
@@ -412,7 +416,77 @@ class VideoHandler:
             "video_file_ambiguous_failure_count": (
                 self._video_file_ambiguous_failure_count if replay_source else None
             ),
+            "video_file_realtime_skipped_frames": (
+                self._video_file_realtime_skipped_frames if replay_source else None
+            ),
         }
+
+    def discard_realtime_video_file_backlog(self, elapsed_ms: float) -> int:
+        """Drop only overdue OpenCV replay frames in REALTIME mode.
+
+        GStreamer REALTIME file pipelines already use a clock-synchronised,
+        leaky appsink. Deterministic replay and maximum-throughput modes must
+        preserve capture order, so this catch-up path is deliberately limited
+        to OpenCV-backed local files.
+        """
+        pipeline_mode = str(
+            getattr(Parameters, "PIPELINE_MODE", "REALTIME") or "REALTIME"
+        ).strip().upper()
+        if (
+            pipeline_mode != "REALTIME"
+            or not self._is_video_file_source()
+            or not self._capture_mode.startswith("video_file_opencv")
+        ):
+            self._video_file_realtime_skip_credit = 0.0
+            return 0
+
+        try:
+            elapsed = float(elapsed_ms)
+            fps = float(self.fps)
+        except (TypeError, ValueError):
+            return 0
+        if not math.isfinite(elapsed) or elapsed <= 0.0 or not math.isfinite(fps) or fps <= 0.0:
+            return 0
+
+        frame_interval_ms = 1000.0 / fps
+        self._video_file_realtime_skip_credit += elapsed / frame_interval_ms - 1.0
+        self._video_file_realtime_skip_credit = max(
+            -1.0,
+            self._video_file_realtime_skip_credit,
+        )
+        requested = int(max(0.0, math.floor(self._video_file_realtime_skip_credit)))
+        if requested <= 0:
+            return 0
+
+        capture = self.cap
+        if capture is None:
+            self._video_file_realtime_skip_credit = 0.0
+            return 0
+
+        dropped = 0
+        with self._capture_read_lock:
+            with self._source_initialization_lock:
+                if capture is not self.cap:
+                    self._video_file_realtime_skip_credit = 0.0
+                    return 0
+            for _ in range(requested):
+                if not capture.grab():
+                    break
+                dropped += 1
+
+        self._video_file_realtime_skip_credit = max(
+            0.0,
+            self._video_file_realtime_skip_credit - dropped,
+        )
+        if dropped < requested:
+            self._video_file_realtime_skip_credit = 0.0
+        self._video_file_realtime_skipped_frames += dropped
+        if dropped:
+            logger.debug(
+                "VIDEO_FILE REALTIME catch-up dropped %d stale frame(s)",
+                dropped,
+            )
+        return dropped
 
     @staticmethod
     def _capture_property_float(cap: Any, property_id: int) -> Optional[float]:
@@ -1501,6 +1575,7 @@ class VideoHandler:
         self._video_file_playback_epoch += 1
         self._video_file_loop_count += 1
         self._video_file_frames_in_epoch = 0
+        self._video_file_realtime_skip_credit = 0.0
         self._video_file_playback_state = "rewind_pending"
         self._video_file_terminal_reason = None
         logger.info(

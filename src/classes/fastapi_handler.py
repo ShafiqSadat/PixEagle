@@ -1108,12 +1108,20 @@ class FastAPIHandler:
         return closed
     
     async def _ws_send_frames(self, websocket: WebSocket, client: ClientConnection):
-        """Send frames to WebSocket client with unified adaptive quality."""
+        """Send the newest frame without building a reliable-transport backlog."""
         next_send_at = time.monotonic()
         last_frame_id = -1
         consecutive_errors = 0
 
         while not self.is_shutting_down:
+            while (
+                client.latest_frame_ack_enabled
+                and client.frame_in_flight_id is not None
+                and not self.is_shutting_down
+            ):
+                await client.frame_ack_event.wait()
+                client.frame_ack_event.clear()
+
             remaining = next_send_at - time.monotonic()
             if remaining > 0:
                 await asyncio.sleep(remaining)
@@ -1146,20 +1154,31 @@ class FastAPIHandler:
                     )
 
                 # Send frame with metadata
-                captured_at = time.time()
+                sent_at = time.time()
+                published_at = getattr(stamped, "timestamp", None)
+                frame_age_ms = (
+                    max(0.0, (time.monotonic() - published_at) * 1000.0)
+                    if isinstance(published_at, (int, float))
+                    else None
+                )
                 message = {
                     'type': 'frame',
-                    'timestamp': captured_at,
+                    'timestamp': sent_at,
                     'quality': client.quality,
                     'size': len(frame_bytes),
                     'frame_id': stamped.frame_id,
+                    'frame_age_ms': (
+                        round(frame_age_ms, 1) if frame_age_ms is not None else None
+                    ),
                 }
 
                 # Send metadata then binary frame
+                if client.latest_frame_ack_enabled:
+                    client.frame_ack_event.clear()
+                    client.frame_in_flight_id = stamped.frame_id
                 await websocket.send_json(message)
                 await websocket.send_bytes(frame_bytes)
 
-                sent_at = time.time()
                 next_send_at = time.monotonic() + self.frame_interval
                 last_frame_id = stamped.frame_id
                 client.last_frame_time = sent_at
@@ -1188,8 +1207,28 @@ class FastAPIHandler:
 
                 msg_type = message.get('type')
 
+                if msg_type == 'stream_capabilities':
+                    client.latest_frame_ack_enabled = bool(
+                        message.get('latest_frame_ack', False)
+                    )
+                    if not client.latest_frame_ack_enabled:
+                        client.frame_in_flight_id = None
+                        client.frame_ack_event.set()
+
+                elif msg_type == 'frame_ack':
+                    acknowledged = message.get('frame_id')
+                    if (
+                        client.latest_frame_ack_enabled
+                        and isinstance(acknowledged, int)
+                        and not isinstance(acknowledged, bool)
+                        and acknowledged == client.frame_in_flight_id
+                    ):
+                        client.last_acknowledged_frame_id = acknowledged
+                        client.frame_in_flight_id = None
+                        client.frame_ack_event.set()
+
                 # Handle quality adjustment requests
-                if msg_type == 'quality':
+                elif msg_type == 'quality':
                     requested_quality = message.get('quality')
                     if isinstance(requested_quality, (int, float)):
                         requested_quality = int(requested_quality)

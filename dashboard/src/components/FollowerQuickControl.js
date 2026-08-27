@@ -9,12 +9,11 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Chip,
-  Tooltip,
-  IconButton
+  Chip
 } from '@mui/material';
-import { SwapHoriz, Speed, ControlCamera, PowerSettingsNew, PowerOff, FlightTakeoff } from '@mui/icons-material';
+import { SwapHoriz, Speed, ControlCamera, PowerSettingsNew, PowerOff } from '@mui/icons-material';
 import { useFollowerProfiles, useCurrentFollowerProfile } from '../hooks/useFollowerSchema';
+import DocumentationLink, { PIXEAGLE_DOCS } from './DocumentationLink';
 
 const FollowerQuickControl = () => {
   const { profiles, loading: profilesLoading } = useFollowerProfiles();
@@ -81,11 +80,7 @@ const FollowerQuickControl = () => {
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
           Follower Profile
         </Typography>
-        <Tooltip title="Select follower profile">
-          <IconButton size="small">
-            <FlightTakeoff fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <DocumentationLink href={PIXEAGLE_DOCS.followers} label="Follower profile guide" />
       </Box>
 
       {/* Current Profile Status */}

@@ -24,6 +24,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import MemoryIcon from '@mui/icons-material/Memory';
 import { Link } from 'react-router-dom';
 import { useActiveModel, useModels, useSwitchModel, useModelLabels } from '../hooks/useModels';
+import DocumentationLink, { PIXEAGLE_DOCS } from './DocumentationLink';
 
 const ModelControlHeader = ({
   setupMode,
@@ -55,6 +56,7 @@ const ModelControlHeader = ({
           <SmartToyIcon fontSize="small" />
         </IconButton>
       </Tooltip>
+      <DocumentationLink href={PIXEAGLE_DOCS.smartModels} label="Detection model guide" />
     </Box>
   </Box>
 );

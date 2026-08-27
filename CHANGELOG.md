@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Keep overloaded local-video demos near wall-clock time by dropping only
+  overdue OpenCV replay frames in `REALTIME` mode. Deterministic replay and
+  maximum-throughput modes continue to preserve capture order.
+- Add an optional rendered-frame acknowledgement to dashboard WebSocket JPEG
+  streaming, bounding each negotiated client to one in-flight frame while
+  preserving compatibility with existing native/QGC clients.
+- Repair schema-driven tracker icons in the compact selector and add restrained
+  documentation links for classic trackers, Smart models, and follower
+  profiles. The tracker reference now distinguishes relative full-pipeline
+  cost and short-term identity limits.
 - Add optional OpenCV `DaSiamRPN` as a heavier distractor-aware classic
   tracker. Its three MIT-licensed model files are checksum-pinned, installed by
   one default-No setup choice, reused when exact, and isolated from Core setup

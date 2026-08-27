@@ -408,6 +408,7 @@ const VideoStream = ({
     let isMounted = true;
     let reconnectScheduled = false;
     let authorizationRejected = false;
+    let ws = null;
     setIsConnecting(true);
     setHasReceivedFrame(false);
     hasReceivedFrameRef.current = false;
@@ -446,10 +447,28 @@ const VideoStream = ({
               bandwidth,
               lastFrameTime: metadata.timestamp || now,
             }));
+            if (
+              Number.isInteger(metadata.frame_id)
+              && ws?.readyState === WebSocket.OPEN
+            ) {
+              ws.send(JSON.stringify({
+                type: 'frame_ack',
+                frame_id: metadata.frame_id,
+              }));
+            }
           },
-          onError: (decodeError) => {
+          onError: (decodeError, metadata = {}) => {
             if (isMounted) {
               console.error('Failed to decode WebSocket JPEG frame:', decodeError);
+            }
+            if (
+              Number.isInteger(metadata.frame_id)
+              && ws?.readyState === WebSocket.OPEN
+            ) {
+              ws.send(JSON.stringify({
+                type: 'frame_ack',
+                frame_id: metadata.frame_id,
+              }));
             }
           },
         }
@@ -460,7 +479,6 @@ const VideoStream = ({
       return undefined;
     }
 
-    let ws;
     try {
       ws = createDashboardWebSocket(websocketVideoFeed);
     } catch (authError) {
@@ -479,6 +497,10 @@ const VideoStream = ({
       setError(null);
       setIsConnecting(false);
       reconnectAttempts.current = 0;
+      ws.send(JSON.stringify({
+        type: 'stream_capabilities',
+        latest_frame_ack: true,
+      }));
 
       // Start heartbeat
       heartbeatInterval.current = setInterval(sendHeartbeat, 15000);

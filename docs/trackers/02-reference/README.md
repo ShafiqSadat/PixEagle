@@ -30,16 +30,21 @@ values depend on target pixel size, camera motion, compression, model, runtime,
 and hardware. Benchmark candidates on representative recordings and report the
 exact configuration and computer.
 
-| Tracker | Acceleration | Recovery Boundary |
-|---------|--------------|-------------------|
-| CSRT | CPU | App-owned bounded detector recovery after a rejected measurement |
-| KCF + Kalman | CPU | Prediction can guide recovery; prediction is not command-eligible measurement |
-| Sparse Flow | CPU | Forward-backward failure is fail-closed; app owns bounded recovery |
-| VitTrack | CPU by default | Native confidence plus app-owned bounded detector recovery |
-| DaSiamRPN | CPU by default | Native distractor confidence plus app-owned bounded detector recovery |
-| dlib | CPU | App-owned bounded detector recovery when configured |
+| Tracker | Typical Host Load | Recovery Boundary |
+|---------|-------------------|-------------------|
+| CSRT | Medium CPU | App-owned bounded detector recovery after a rejected measurement |
+| KCF + Kalman | Lower CPU | Prediction can guide recovery; prediction is not command-eligible measurement |
+| Sparse Flow | Low-to-medium CPU; texture-dependent | Forward-backward failure is fail-closed; app owns bounded recovery |
+| VitTrack | Model-backed CPU by default | Native confidence plus app-owned bounded detector recovery |
+| DaSiamRPN | High model-backed CPU by default | Native distractor confidence plus app-owned bounded detector recovery |
+| dlib | Lower-to-medium CPU | App-owned bounded detector recovery when configured |
 | Gimbal | Provider-dependent | Provider freshness and validity contract |
 | SmartTracker | CPU/GPU/model-dependent | Detector association with tentative/confirmed lifecycle |
+
+Relative load is guidance, not a benchmark result. Measure the complete loop,
+including capture, tracker, recovery, OSD, encoding, and transport. In
+`REALTIME` file mode PixEagle may skip overdue replay frames to preserve
+wall-clock freshness; deterministic replay preserves every frame for analysis.
 
 ### Feature Matrix
 
@@ -90,6 +95,11 @@ exact configuration and computer.
 - Rapid camera motion or background transitions defeat lighter candidates
 - Its three verified model artifacts are installed
 - Native low-score intervals should remain stale while internal state continues
+
+Do not choose a short-term classic tracker when the requirement is to prove
+physical identity after full disappearance among similar objects. Use a
+representative Smart detector/association model or evaluate the deferred
+long-term/ReID provider work, and retain fail-closed operator recovery.
 
 ### Choose Gimbal Tracker When:
 - External gimbal hardware provides angles

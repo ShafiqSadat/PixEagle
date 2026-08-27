@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FollowerQuickControl from './FollowerQuickControl';
+import { PIXEAGLE_DOCS } from './DocumentationLink';
 
 let mockProfiles;
 let mockCurrentProfile;
@@ -53,6 +54,10 @@ test('shows the persisted profile and disables a no-op save', () => {
 
   expect(screen.getByText('Saved')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Save Follower/ })).toBeDisabled();
+  expect(screen.getByRole('link', { name: 'Follower profile guide' })).toHaveAttribute(
+    'href',
+    PIXEAGLE_DOCS.followers
+  );
 });
 
 test('saves a changed profile without requiring a process restart', async () => {

@@ -258,7 +258,7 @@ tracker_types:
     ui_metadata:
       display_name: "CSRT"
       short_description: "Validated short-term correlation tracking"
-      icon: "🎯"
+      icon: "correlation"
       factory_key: "CSRT"  # Key used in tracker_factory.py create_tracker()
       exclude_from_ui: false  # Show in UI selector
       performance_category: "scenario_dependent"
@@ -289,7 +289,7 @@ tracker_types:
     ui_metadata:
       display_name: "KCF + Kalman"
       short_description: "Fast tracking with state estimation"
-      icon: "⚡"
+      icon: "speed"
       factory_key: "KCF"  # Key used in tracker_factory.py create_tracker()
       exclude_from_ui: false  # Show in UI selector
       performance_category: "scenario_dependent"
@@ -324,7 +324,7 @@ tracker_types:
     ui_metadata:
       display_name: "VitTrack"
       short_description: "Appearance-aware model tracking"
-      icon: "🎯"
+      icon: "track_changes"
       factory_key: "VitTrack"
       exclude_from_ui: false
       performance_category: "scenario_dependent"
@@ -394,7 +394,7 @@ tracker_types:
     ui_metadata:
       display_name: "Sparse Flow"
       short_description: "Fast validated point-flow tracking"
-      icon: "🎯"
+      icon: "optical_flow"
       factory_key: "SparseFlow"
       exclude_from_ui: false
       performance_category: "scenario_dependent"
@@ -451,7 +451,7 @@ tracker_types:
     ui_metadata:
       display_name: "Gimbal Tracker"
       short_description: "External gimbal angle tracker"
-      icon: "📡"
+      icon: "external"
       factory_key: "Gimbal"  # Key used in tracker_factory.py create_tracker()
       exclude_from_ui: false  # Show in UI selector for gimbal users
       performance_category: "provider_dependent"
@@ -489,7 +489,7 @@ tracker_types:
     ui_metadata:
       display_name: "dlib Correlation"
       short_description: "Optional PSR-based correlation tracker"
-      icon: "🚀"
+      icon: "correlation"
       factory_key: "dlib"  # Key used in tracker_factory.py create_tracker()
       exclude_from_ui: false  # Show in UI selector
       performance_category: "scenario_dependent"

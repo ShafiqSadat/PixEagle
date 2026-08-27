@@ -343,6 +343,17 @@ class FlowController:
         if previous is not None and epoch != previous:
             self._last_frame_pts_ms = None
 
+    def _discard_realtime_replay_backlog(self, elapsed_ms: float) -> int:
+        """Keep REALTIME file replay near wall clock without affecting other modes."""
+        if self._pipeline_mode != "REALTIME":
+            return 0
+        discard = getattr(
+            self.controller.video_handler,
+            "discard_realtime_video_file_backlog",
+            None,
+        )
+        return discard(elapsed_ms) if callable(discard) else 0
+
     def main_loop(self):
         """
         Main loop to handle video processing, user inputs, and the main application flow.
@@ -404,8 +415,13 @@ class FlowController:
                     if wait_ms > 1:
                         time.sleep(wait_ms / 1000.0)
 
-                # Update pipeline metrics (for observability)
+                # REALTIME replay represents a live workload: discard local-file
+                # frames that became stale while this iteration was processing.
                 loop_total_ms = (time.monotonic() - t_loop_start) * 1000.0
+                self._discard_realtime_replay_backlog(loop_total_ms)
+                loop_total_ms = (time.monotonic() - t_loop_start) * 1000.0
+
+                # Update pipeline metrics (for observability)
                 self._update_pipeline_metrics(processing_ms, wait_ms, loop_total_ms)
 
         except KeyboardInterrupt:

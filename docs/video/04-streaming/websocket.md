@@ -17,10 +17,15 @@ Each video frame is two ordered WebSocket messages:
 2. A binary JPEG payload.
 
 The server reads the shared `FramePublisher`, skips duplicate frame IDs, limits
-send cadence to `Streaming.STREAM_FPS`, and sends the newest available frame.
-The dashboard has one active JPEG decode and one newest pending frame. It
-replaces an older pending frame rather than allowing decode or network backlog
-to turn into visible latency.
+send cadence to `Streaming.STREAM_FPS`, and samples the newest available frame.
+The dashboard negotiates latest-frame acknowledgement when the socket opens.
+The server then permits one JPEG in flight per client and samples again only
+after that frame renders or fails decode. This bounds reliable-transport
+backlog as well as browser decode work. Older clients remain compatible without
+the acknowledgement extension.
+
+Metadata also includes `frame_age_ms`, measured from frame publication to the
+start of transmission. It is diagnostic timing, not end-to-end render latency.
 
 WebSocket is a compatibility fallback, not a replacement for WebRTC or the
 GStreamer H.264/RTP path. Use dashboard `auto` to try WebRTC first and fall
@@ -70,9 +75,9 @@ diagnostics see the streaming media-health resource and runtime logs.
 
 The dashboard uses `createLatestJpegFrameRenderer` in
 `dashboard/src/services/latestJpegFrameRenderer.js`. A small native client
-should follow the same policy: keep metadata paired with its following binary
-frame, decode at most one frame at a time, replace the pending frame with the
-newest one, and close decoded resources/object URLs.
+should follow the same policy: negotiate acknowledgement, keep metadata paired
+with its following binary frame, decode at most one frame at a time, acknowledge
+render or decode failure, and close decoded resources/object URLs.
 
 ```javascript
 const ws = new WebSocket('ws://127.0.0.1:5077/ws/video_feed');
@@ -81,6 +86,11 @@ ws.binaryType = 'arraybuffer';
 let pendingMetadata = null;
 let activeDecode = false;
 let newest = null;
+
+ws.onopen = () => ws.send(JSON.stringify({
+  type: 'stream_capabilities',
+  latest_frame_ack: true,
+}));
 
 ws.onmessage = (event) => {
   if (typeof event.data === 'string') {
@@ -106,6 +116,12 @@ async function renderNewestWhenIdle() {
     // Draw bitmap to the canvas, then close it. Keep only the latest pending frame.
     bitmap.close();
   } finally {
+    if (Number.isInteger(frame.metadata?.frame_id)) {
+      ws.send(JSON.stringify({
+        type: 'frame_ack',
+        frame_id: frame.metadata.frame_id,
+      }));
+    }
     activeDecode = false;
     renderNewestWhenIdle();
   }
@@ -131,7 +147,15 @@ environment files.
 
 ## Client messages
 
-The current server accepts only these client messages:
+The server accepts these client messages:
+
+```json
+{"type":"stream_capabilities","latest_frame_ack":true}
+```
+
+```json
+{"type":"frame_ack","frame_id":42}
+```
 
 ```json
 {"type":"quality","quality":60}
@@ -141,15 +165,18 @@ The current server accepts only these client messages:
 {"type":"ping","client_timestamp":1730000000000}
 ```
 
-The first requests a bounded per-client JPEG quality. The second receives a
-`pong` containing the echoed timestamp and is used for display latency. OSD,
-resize, and source changes are server configuration; arbitrary `config`
-messages are not part of this contract.
+The capability message enables the optional one-frame-in-flight contract. An
+acknowledgement is accepted only for the exact outstanding frame. The quality
+message requests a bounded per-client JPEG quality. A ping receives a `pong`
+containing the echoed timestamp and is used for display latency. OSD, resize,
+and source changes are server configuration; arbitrary `config` messages are
+not part of this contract.
 
 ## QGroundControl
 
 QGroundControl proposal #14731 consumes complete binary JPEG messages and
-ignores JSON metadata messages. For a same-host test:
+ignores JSON metadata messages. It therefore uses the compatible legacy mode,
+without rendered-frame acknowledgements. For a same-host test:
 
 ```text
 ws://127.0.0.1:5077/ws/video_feed

@@ -8,6 +8,7 @@ import {
   clearDashboardAuthSession,
   setDashboardAuthSession,
 } from '../services/apiClient';
+import { createLatestJpegFrameRenderer } from '../services/latestJpegFrameRenderer';
 
 jest.mock('../services/latestJpegFrameRenderer', () => ({
   createLatestJpegFrameRenderer: jest.fn(() => ({
@@ -33,6 +34,7 @@ describe('VideoStream browser-session media authorization', () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     clearDashboardAuthSession(null);
+    createLatestJpegFrameRenderer.mockClear();
     jest.spyOn(apiClient, 'apiFetchJson').mockResolvedValue(STREAMING_CLIENT_CONFIG);
   });
 
@@ -423,6 +425,42 @@ describe('VideoStream browser-session media authorization', () => {
 
     expect(await screen.findByText(/Authenticated media session with media:read scope is required/)).toBeInTheDocument();
     expect(sockets[0].close).toHaveBeenCalledTimes(1);
+  });
+
+  test('bounds websocket delivery with rendered-frame acknowledgements', async () => {
+    const sockets = installMockWebSocket();
+    setDashboardAuthSession({
+      auth_mode: 'browser_session',
+      authenticated: true,
+      principal: { scopes: ['media:read'] },
+    });
+
+    renderVideo({ protocol: 'websocket' });
+    await waitFor(() => expect(global.WebSocket).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createLatestJpegFrameRenderer).toHaveBeenCalled());
+    const rendererOptions = createLatestJpegFrameRenderer.mock.calls.at(-1)[1];
+
+    act(() => {
+      sockets[0].readyState = global.WebSocket.OPEN;
+      sockets[0].onopen();
+    });
+    expect(sockets[0].send).toHaveBeenCalledWith(JSON.stringify({
+      type: 'stream_capabilities',
+      latest_frame_ack: true,
+    }));
+
+    act(() => {
+      rendererOptions.onRender({
+        frame_id: 42,
+        size: 1024,
+        quality: 70,
+        timestamp: Date.now(),
+      });
+    });
+    expect(sockets[0].send).toHaveBeenCalledWith(JSON.stringify({
+      type: 'frame_ack',
+      frame_id: 42,
+    }));
   });
 
   test('shows explicit operator guidance when websocket auth is rejected', async () => {
