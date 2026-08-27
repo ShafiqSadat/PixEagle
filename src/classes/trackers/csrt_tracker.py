@@ -22,18 +22,21 @@ logger = logging.getLogger(__name__)
 class CSRTTracker(BaseTracker):
     """CSRT Tracker with legacy / balanced / robust performance modes."""
 
+    TRACKER_ALGORITHM = "CSRT"
+    CONFIG_SECTION = "CSRT_Tracker"
+
     def __init__(self, video_handler: Optional[object] = None,
                  detector: Optional[object] = None,
                  app_controller: Optional[object] = None):
         super().__init__(video_handler, detector, app_controller)
 
-        self.tracker_name = "CSRT"
+        self.tracker_name = self.TRACKER_ALGORITHM
 
         if self.position_estimator:
             self.position_estimator.reset()
 
         # Performance mode from config
-        csrt_config = getattr(Parameters, 'CSRT_Tracker', {})
+        csrt_config = self._tracker_config()
         self.performance_mode = csrt_config.get('performance_mode', 'robust')
         self._configure_performance_mode()
 
@@ -51,13 +54,18 @@ class CSRTTracker(BaseTracker):
 
         logger.info(f"{self.tracker_name} initialized in '{self.performance_mode}' mode")
 
+    def _tracker_config(self) -> dict:
+        """Return this adapter's authoritative configuration section."""
+        config = getattr(Parameters, self.CONFIG_SECTION, {})
+        return config if isinstance(config, dict) else {}
+
     def _configure_performance_mode(self):
         """Configure tracker based on performance mode.
 
-        Mode-specific defaults are used as fallbacks; YAML values in
-        CSRT_Tracker section take priority (making config authoritative).
+        Mode-specific defaults are used as fallbacks; values in the adapter's
+        configured section take priority (making config authoritative).
         """
-        csrt_config = getattr(Parameters, 'CSRT_Tracker', {})
+        csrt_config = self._tracker_config()
 
         # Per-mode defaults (used when YAML doesn't specify a value)
         mode_defaults = {
@@ -141,11 +149,11 @@ class CSRTTracker(BaseTracker):
             'balanced': "BALANCED - smoothed confidence validation",
             'robust': "ROBUST - confidence, appearance, motion, and scale validation",
         }
-        logger.info(f"CSRT Mode: {labels[self.performance_mode]}")
+        logger.info(f"{self.tracker_name} mode: {labels[self.performance_mode]}")
 
     def _create_tracker(self):
         """Creates OpenCV CSRT tracker with optimized parameters."""
-        csrt_config = getattr(Parameters, 'CSRT_Tracker', {})
+        csrt_config = self._tracker_config()
         params = cv2.TrackerCSRT_Params()
         params.use_color_names = csrt_config.get('use_color_names', True)
         params.use_hog = csrt_config.get('use_hog', True)
@@ -236,7 +244,9 @@ class CSRTTracker(BaseTracker):
         logger.info(f"Initializing {self.tracker_name} tracker with bbox: {bbox}")
         init_result = self.tracker.init(frame, bbox)
         if init_result is False:
-            raise RuntimeError("OpenCV CSRT tracker rejected the initial ROI")
+            raise RuntimeError(
+                f"OpenCV {self.tracker_name} tracker rejected the initial ROI"
+            )
         self.tracking_started = True
 
         self._initialize_detector_target(frame, bbox)
@@ -277,12 +287,16 @@ class CSRTTracker(BaseTracker):
         success, detected_bbox = self.tracker.update(frame)
 
         if not success:
-            logger.debug("OpenCV CSRT returned no candidate")
+            logger.debug("OpenCV %s returned no candidate", self.tracker_name)
             return self._handle_failure(frame, start_time)
 
         candidate_bbox = self._coerce_candidate_bbox(detected_bbox)
         if candidate_bbox is None:
-            logger.debug("OpenCV CSRT returned invalid candidate geometry: %r", detected_bbox)
+            logger.debug(
+                "OpenCV %s returned invalid candidate geometry: %r",
+                self.tracker_name,
+                detected_bbox,
+            )
             return self._handle_failure(
                 frame,
                 start_time,
@@ -290,7 +304,8 @@ class CSRTTracker(BaseTracker):
             )
         if not self._candidate_overlaps_frame(frame, candidate_bbox):
             logger.debug(
-                "OpenCV CSRT candidate has no frame overlap: %r",
+                "OpenCV %s candidate has no frame overlap: %r",
+                self.tracker_name,
                 candidate_bbox,
             )
             return self._handle_failure(
@@ -378,10 +393,10 @@ class CSRTTracker(BaseTracker):
         raw_confidence = self._evaluate_candidate_confidence(frame, bbox)
         self._set_candidate_geometry(bbox)
         self.confidence = raw_confidence
-        confidence_valid = raw_confidence >= Parameters.CONFIDENCE_THRESHOLD
+        confidence_valid = raw_confidence >= self.confidence_threshold
         appearance_valid = self._appearance_is_valid()
         if not self._candidate_is_confirmed(confidence_valid and appearance_valid):
-            logger.debug("CSRT candidate rejected in legacy mode")
+            logger.debug("%s candidate rejected in legacy mode", self.tracker_name)
             reason = (
                 "appearance_mismatch"
                 if confidence_valid and not appearance_valid
@@ -408,8 +423,13 @@ class CSRTTracker(BaseTracker):
         confidence_valid = smoothed_confidence >= self.confidence_threshold
         appearance_valid = self._appearance_is_valid()
         if not self._candidate_is_confirmed(confidence_valid and appearance_valid):
-            logger.debug(f"Low confidence ({self.failure_count}/{self.failure_threshold}): "
-                         f"{smoothed_confidence:.2f}")
+            logger.debug(
+                "%s low confidence (%d/%d): %.2f",
+                self.tracker_name,
+                self.failure_count,
+                self.failure_threshold,
+                smoothed_confidence,
+            )
             reason = (
                 "appearance_mismatch"
                 if confidence_valid and not appearance_valid
@@ -459,15 +479,25 @@ class CSRTTracker(BaseTracker):
             and scale_valid
         )
         if self._candidate_is_confirmed(candidate_valid):
-            logger.debug(f"CSRT accepted: conf={smoothed_confidence:.2f}, "
-                         f"motion={motion_valid}, scale={scale_valid}")
+            logger.debug(
+                "%s accepted: conf=%.2f, motion=%s, scale=%s",
+                self.tracker_name,
+                smoothed_confidence,
+                motion_valid,
+                scale_valid,
+            )
             return self._accept_result(
                 frame, bbox, dt, start_time,
                 update_appearance=update_appearance,
             )
 
-        logger.debug(f"Rejected CSRT candidate: conf={smoothed_confidence:.2f}, "
-                     f"motion={motion_valid}, scale={scale_valid}")
+        logger.debug(
+            "Rejected %s candidate: conf=%.2f, motion=%s, scale=%s",
+            self.tracker_name,
+            smoothed_confidence,
+            motion_valid,
+            scale_valid,
+        )
         if candidate_valid:
             loss_reason = "reacquisition_pending"
         elif not scale_valid:
@@ -538,37 +568,46 @@ class CSRTTracker(BaseTracker):
     # Output
     # =========================================================================
 
+    def _output_quality_metrics(self) -> dict:
+        return {
+            'appearance_confidence': getattr(self, 'appearance_confidence', 1.0),
+        }
+
+    def _output_raw_data(self) -> dict:
+        return {
+            'performance_mode': self.performance_mode,
+            'candidate_state': (
+                'confirmed'
+                if self.is_validated and self.failure_count == 0
+                else 'tentative'
+                if self._candidate_bbox is not None
+                else 'none'
+            ),
+            'candidate_bbox': self._candidate_bbox,
+            'validation_progress': {
+                'confirmed_frames': self.consecutive_valid_frames,
+                'required_frames': self.validation_consensus_frames,
+            },
+        }
+
+    def _output_metadata(self) -> dict:
+        return {
+            'performance_mode': self.performance_mode,
+            'opencv_version': cv2.__version__,
+        }
+
     def get_output(self) -> TrackerOutput:
         return self._build_output(
-            tracker_algorithm='CSRT',
-            extra_quality={
-                'appearance_confidence': getattr(self, 'appearance_confidence', 1.0),
-            },
-            extra_raw={
-                'performance_mode': self.performance_mode,
-                'candidate_state': (
-                    'confirmed'
-                    if self.is_validated and self.failure_count == 0
-                    else 'tentative'
-                    if self._candidate_bbox is not None
-                    else 'none'
-                ),
-                'candidate_bbox': self._candidate_bbox,
-                'validation_progress': {
-                    'confirmed_frames': self.consecutive_valid_frames,
-                    'required_frames': self.validation_consensus_frames,
-                },
-            },
-            extra_metadata={
-                'performance_mode': self.performance_mode,
-                'opencv_version': cv2.__version__,
-            },
+            tracker_algorithm=self.TRACKER_ALGORITHM,
+            extra_quality=self._output_quality_metrics(),
+            extra_raw=self._output_raw_data(),
+            extra_metadata=self._output_metadata(),
         )
 
     def get_capabilities(self) -> dict:
         base = super().get_capabilities()
         base.update({
-            'tracker_algorithm': 'CSRT',
+            'tracker_algorithm': self.TRACKER_ALGORITHM,
             'supports_rotation': True,
             'supports_scale_change': True,
             'supports_occlusion': False,

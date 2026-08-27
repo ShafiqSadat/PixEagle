@@ -83,6 +83,8 @@ MAVSDK_BINARY_STATE="pending"
 MAVSDK_BINARY_DETAIL="not checked"
 MAVLINK2REST_BINARY_STATE="pending"
 MAVLINK2REST_BINARY_DETAIL="not checked"
+CLASSIC_TRACKER_ARTIFACT_STATE="pending"
+CLASSIC_TRACKER_ARTIFACT_DETAIL="not checked"
 OPTIONAL_DLIB_STATE="skipped"
 OPTIONAL_DLIB_DETAIL="not selected"
 OPTIONAL_GSTREAMER_STATE="skipped"
@@ -337,7 +339,7 @@ display_banner() {
         pixeagle_has_interactive_input && clear
         display_pixeagle_banner "Setup" "Vision tracking and PX4 companion runtime"
     fi
-    get_version_info "7.1.2"
+    get_version_info "7.2.0"
     if pixeagle_has_interactive_input; then
         echo -e "  ${DIM}10 guided steps; press Enter to accept a displayed default.${NC}"
     else
@@ -1909,6 +1911,40 @@ setup_mavlink2rest() {
     fi
 }
 
+setup_classic_tracker_artifacts() {
+    local installer="$SCRIPTS_DIR/setup/install-tracker-artifacts.py"
+    local python_bin="$VENV_PYTHON"
+
+    if [[ "${PIXEAGLE_SKIP_TRACKER_ARTIFACTS:-0}" == "1" ]]; then
+        CLASSIC_TRACKER_ARTIFACT_STATE="skipped"
+        CLASSIC_TRACKER_ARTIFACT_DETAIL="explicitly skipped; run make install-tracker-artifacts later"
+        return 0
+    fi
+    if [[ ! -x "$python_bin" ]]; then
+        python_bin="$SETUP_PYTHON"
+    fi
+    if [[ ! -f "$installer" || -z "$python_bin" || ! -x "$python_bin" ]]; then
+        CLASSIC_TRACKER_ARTIFACT_STATE="degraded"
+        CLASSIC_TRACKER_ARTIFACT_DETAIL="installer or Python runtime unavailable"
+        log_warn "VitTrack model setup unavailable"
+        log_detail "Run later: make install-tracker-artifacts"
+        return 0
+    fi
+
+    echo ""
+    log_info "Verifying model-backed classic tracker artifacts"
+    if "$python_bin" "$installer" --project-root "$PIXEAGLE_DIR"; then
+        CLASSIC_TRACKER_ARTIFACT_STATE="ready"
+        CLASSIC_TRACKER_ARTIFACT_DETAIL="OpenCV VitTrack model checksum verified"
+    else
+        CLASSIC_TRACKER_ARTIFACT_STATE="degraded"
+        CLASSIC_TRACKER_ARTIFACT_DETAIL="VitTrack unavailable; other trackers remain usable"
+        log_warn "VitTrack model was not installed; Core/Full setup remains usable"
+        log_detail "Retry later: make install-tracker-artifacts"
+    fi
+    return 0
+}
+
 # ============================================================================
 # Summary Display
 # ============================================================================
@@ -1955,6 +1991,7 @@ show_bootstrap_summary() {
     summary_status_line "$DASHBOARD_ENV_STATE" "Dashboard environment" "$DASHBOARD_ENV_DETAIL"
     summary_status_line "$MAVSDK_BINARY_STATE" "MAVSDK Server" "$MAVSDK_BINARY_DETAIL"
     summary_status_line "$MAVLINK2REST_BINARY_STATE" "MAVLink2REST" "$MAVLINK2REST_BINARY_DETAIL"
+    summary_status_line "$CLASSIC_TRACKER_ARTIFACT_STATE" "VitTrack model" "$CLASSIC_TRACKER_ARTIFACT_DETAIL"
     if [[ -n "${OPTIONAL_COMPONENT_SELECTION:-}" ]]; then
         optional_component_selected dlib && \
             summary_status_line "$OPTIONAL_DLIB_STATE" "dlib tracker" "$OPTIONAL_DLIB_DETAIL"
@@ -2003,6 +2040,7 @@ show_summary() {
     summary_status_line "$DASHBOARD_ENV_STATE" "Dashboard .env" "$DASHBOARD_ENV_DETAIL"
     summary_status_line "$MAVSDK_BINARY_STATE" "MAVSDK Server binary" "$MAVSDK_BINARY_DETAIL"
     summary_status_line "$MAVLINK2REST_BINARY_STATE" "MAVLink2REST binary" "$MAVLINK2REST_BINARY_DETAIL"
+    summary_status_line "$CLASSIC_TRACKER_ARTIFACT_STATE" "VitTrack model" "$CLASSIC_TRACKER_ARTIFACT_DETAIL"
     if [[ -n "${OPTIONAL_COMPONENT_SELECTION:-}" ]]; then
         echo ""
         echo -e "   ${CYAN}${BOLD}Selected optional components:${NC}"
@@ -2457,6 +2495,7 @@ main() {
     setup_configs
     setup_mavsdk_server
     setup_mavlink2rest
+    setup_classic_tracker_artifacts
 
     if [[ "$CONFIG_DEFAULTS_STATE" != "ready" ]]; then
         final_status=1

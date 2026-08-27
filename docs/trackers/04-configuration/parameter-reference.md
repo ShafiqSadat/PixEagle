@@ -12,7 +12,7 @@ overrides belong in `configs/config.yaml`; both are validated by the generated
 
 ```yaml
 Tracking:
-  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, dlib, Gimbal
+  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, VitTrack, dlib, Gimbal
   CENTER_HISTORY_LENGTH: 10
   MOTION_CONFIDENCE_WEIGHT: 0.5
   APPEARANCE_CONFIDENCE_WEIGHT: 0.5
@@ -71,7 +71,7 @@ CSRT_Tracker:
   appearance_learning_rate: 0.1
 ```
 
-For CSRT, KCF, Sparse Flow, and dlib, `failure_threshold` controls when repeated rejected
+For CSRT, KCF, Sparse Flow, VitTrack, and dlib, `failure_threshold` controls when repeated rejected
 measurements are reported as a confirmed loss. It is not a command-validity
 grace period: the first rejected measurement is immediately stale and unusable
 for following.
@@ -108,6 +108,34 @@ KCF_Tracker:
 
 The internal KCF prediction is diagnostic and is never a command-eligible
 measurement. Application-level detector recovery owns reacquisition.
+
+---
+
+## VitTrack Tracker
+
+```yaml
+VitTrack_Tracker:
+  artifact_id: "opencv_vittrack_2023sep"
+  model_path_override: ""
+  model_sha256_override: ""
+  backend_id: 0
+  target_id: 0
+  native_score_threshold: 0.20
+  model_score_weight: 0.65
+  confidence_threshold: 0.40
+  failure_threshold: 5
+  max_scale_change_per_frame: 0.60
+  max_motion_per_frame: 0.60
+  appearance_learning_rate: 0.05
+  appearance_update_min_confidence: 0.60
+  enable_multiframe_validation: true
+  validation_consensus_frames: 3
+```
+
+The artifact registry supplies the default path, digest, provenance, and
+license. Advanced model overrides require both an owner-controlled path under
+`models/` and its SHA-256. See the
+[VitTrack reference](../02-reference/vittrack-tracker.md).
 
 ---
 

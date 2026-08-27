@@ -27,11 +27,13 @@ from classes.trackers.kcf_kalman_tracker import KCFKalmanTracker
 from classes.trackers.gimbal_tracker import GimbalTracker
 from classes.trackers.dlib_tracker import DlibTracker
 from classes.trackers.sparse_flow_tracker import SparseFlowTracker
+from classes.trackers.vittrack_tracker import VitTrackTracker
 
 TRACKER_REGISTRY = {
     "CSRT": CSRTTracker,
     "KCF": KCFKalmanTracker,
     "SparseFlow": SparseFlowTracker,
+    "VitTrack": VitTrackTracker,
     "dlib": DlibTracker,
     "Gimbal": GimbalTracker,
 }
@@ -52,7 +54,7 @@ def create_tracker(algorithm: str,
     Factory function to create tracker instances.
 
     Args:
-        algorithm (str): Tracker name ("CSRT", "KCF", "SparseFlow", "dlib", "Gimbal")
+        algorithm (str): Tracker name ("CSRT", "KCF", "SparseFlow", "VitTrack", "dlib", "Gimbal")
         video_handler: Video streaming handler
         detector: Feature detector for appearance
         app_controller: Main application controller
@@ -186,7 +188,7 @@ from classes.trackers.tracker_factory import TRACKER_REGISTRY
 
 # List all available trackers
 available = list(TRACKER_REGISTRY.keys())
-# ['CSRT', 'KCF', 'SparseFlow', 'dlib', 'Gimbal']
+# ['CSRT', 'Gimbal', 'KCF', 'SparseFlow', 'VitTrack', 'dlib']
 
 # Check if tracker exists
 if "CSRT" in TRACKER_REGISTRY:

@@ -1122,6 +1122,9 @@ sections:
         - value: KCF
           label: KCF + Kalman
           description: Fast tracking with state estimation
+        - value: VitTrack
+          label: VitTrack
+          description: Appearance-aware model tracking
         - value: SparseFlow
           label: Sparse Flow
           description: Fast validated point-flow tracking
@@ -1587,6 +1590,167 @@ sections:
         type: integer
         default: 3
         description: ==============================================================================
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+    additional_properties: false
+  VitTrack_Tracker:
+    display_name: VitTrack Tracker
+    category: tracking
+    icon: track_changes
+    parameters:
+      performance_mode:
+        type: string
+        default: robust
+        description: legacy, balanced, robust validation cost
+        reload_tier: tracker_restart
+        reboot_required: false
+      artifact_id:
+        type: string
+        default: opencv_vittrack_2023sep
+        description: Checksum-pinned model entry from configs/tracker_artifacts.json
+        reload_tier: tracker_restart
+        reboot_required: false
+        options:
+        - value: opencv_vittrack_2023sep
+          label: OpenCV VitTrack 2023-09
+          description: OpenCV Zoo; Apache-2.0
+      model_path_override:
+        type: string
+        default: ''
+        description: Optional custom ONNX path under models/; also set its SHA-256 override
+        reload_tier: tracker_restart
+        reboot_required: false
+      model_sha256_override:
+        type: string
+        default: ''
+        description: Required SHA-256 when a custom VitTrack model path is configured
+        reload_tier: tracker_restart
+        reboot_required: false
+      model_max_bytes:
+        type: integer
+        default: 16777216
+        description: Maximum accepted custom VitTrack ONNX artifact size
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 1024
+        max: 67108864
+        unit: bytes
+      backend_id:
+        type: integer
+        default: 0
+        description: OpenCV DNN backend numeric ID; zero selects the portable default
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      target_id:
+        type: integer
+        default: 0
+        description: OpenCV DNN target numeric ID; zero selects CPU
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      native_score_threshold:
+        type: float
+        default: 0.2
+        description: OpenCV proposal gate (0.0-1.0)
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      model_score_weight:
+        type: float
+        default: 0.65
+        description: Native score contribution to confidence
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      confidence_threshold:
+        type: float
+        default: 0.4
+        description: PixEagle combined measurement gate
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      failure_threshold:
+        type: integer
+        default: 5
+        description: Failures before one confirmed-loss warning
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      confidence_smoothing:
+        type: float
+        default: 0.65
+        description: EMA alpha (0.0-1.0)
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      validation_start_frame:
+        type: integer
+        default: 5
+        description: Grace period before motion/scale gates
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0
+        max: 100
+      max_scale_change_per_frame:
+        type: float
+        default: 0.6
+        description: Maximum accepted scale delta
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      max_motion_per_frame:
+        type: float
+        default: 0.6
+        description: Maximum frame-diagonal motion fraction
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      appearance_learning_rate:
+        type: float
+        default: 0.05
+        description: Accepted appearance-template update rate
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      appearance_update_min_confidence:
+        type: float
+        default: 0.6
+        description: Withhold updates below this confidence
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
+      enable_multiframe_validation:
+        type: boolean
+        default: true
+        description: Require consensus after a rejection
+        reload_tier: tracker_restart
+        reboot_required: false
+      validation_consensus_frames:
+        type: integer
+        default: 3
+        description: Consecutive valid proposals to republish
         reload_tier: tracker_restart
         reboot_required: false
         min: 0

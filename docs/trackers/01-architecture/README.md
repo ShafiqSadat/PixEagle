@@ -65,6 +65,7 @@ BaseTracker (ABC)
 ├── CSRTTracker          - OpenCV CSRT correlation tracker
 ├── KCFKalmanTracker     - KCF + internal Kalman filter
 ├── SparseFlowTracker    - Validated sparse optical flow
+├── VitTrackTracker      - OpenCV model-backed appearance tracker
 ├── DlibTracker          - dlib correlation filter with PSR
 ├── GimbalTracker        - External gimbal angle input
 └── CustomTracker        - Template for custom implementations
@@ -84,6 +85,7 @@ Video Frame
 │ Tracker      │ ◄─── BaseTracker.update(frame)
 │ (CSRT, KCF,  │
 │  SparseFlow, │
+│  VitTrack,   │
 │  dlib, etc.) │
 └──────┬───────┘
        │
@@ -181,7 +183,7 @@ def create_tracker(algorithm: str, video_handler=None, detector=None,
     Create tracker instance by algorithm name.
 
     Args:
-        algorithm: "CSRT", "KCF", "SparseFlow", "dlib", or "Gimbal"
+        algorithm: "CSRT", "KCF", "SparseFlow", "VitTrack", "dlib", or "Gimbal"
 
     Returns:
         BaseTracker instance

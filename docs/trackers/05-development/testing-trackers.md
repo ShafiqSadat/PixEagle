@@ -53,8 +53,8 @@ PYTHONPATH=src .venv/bin/python tools/benchmark_classic_tracker.py \
   --output reports/sparse-flow.json
 ```
 
-Accepted tracker values are `CSRT`, `KCF`, `SparseFlow`, and `dlib` when the
-optional dlib backend is installed. The runner records the video digest,
+Accepted tracker values are `CSRT`, `KCF`, `SparseFlow`, `VitTrack`, and `dlib`
+when their optional runtime/artifact is installed. The runner records the video digest,
 environment, exact tracker config, usable measurement rate, and p50/p95 update
 latency.
 

@@ -12,7 +12,7 @@ The tracker system provides the visual perception layer of PixEagle, detecting a
 |---------|-------------|
 | [Architecture](01-architecture/README.md) | System design, BaseTracker, factory pattern |
 | [Classic Recovery](01-architecture/classic-recovery.md) | Shared bounded local-to-global re-detection |
-| [Tracker Reference](02-reference/README.md) | All 6 tracker implementations |
+| [Tracker Reference](02-reference/README.md) | All 7 tracker implementations |
 | [AI Concepts](03-ai-concepts/README.md) | Detection models, ByteTrack, motion prediction |
 | [Selection Assist](03-ai-concepts/selection-assist-and-segmentation.md) | Classic click assist versus Smart model tasks |
 | [Configuration](04-configuration/README.md) | Schema system, parameters, tuning |
@@ -30,6 +30,7 @@ The tracker system provides the visual perception layer of PixEagle, detecting a
 | [CSRT](02-reference/csrt-tracker.md) | Medium | Scale-adaptive short-term tracking |
 | [KCF + Kalman](02-reference/kcf-kalman-tracker.md) | Lower | Motion-assisted short-term tracking |
 | [Sparse Flow](02-reference/sparse-flow-tracker.md) | Scenario-dependent | Validated high-rate point tracking |
+| [VitTrack](02-reference/vittrack-tracker.md) | Scenario-dependent | Appearance-aware model-backed tracking |
 | [dlib Correlation](02-reference/dlib-tracker.md) | Lower | Optional correlation backend |
 
 ### AI-Powered Tracker
@@ -70,6 +71,7 @@ Each tracker supports specific data types:
 | CSRT | POSITION_2D | BBOX_CONFIDENCE, VELOCITY_AWARE |
 | KCF + Kalman | BBOX_CONFIDENCE | POSITION_2D, VELOCITY_AWARE |
 | Sparse Flow | BBOX_CONFIDENCE | POSITION_2D, VELOCITY_AWARE |
+| VitTrack | BBOX_CONFIDENCE | POSITION_2D, VELOCITY_AWARE |
 | dlib | POSITION_2D | BBOX_CONFIDENCE, VELOCITY_AWARE |
 | SmartTracker | MULTI_TARGET | POSITION_2D, BBOX_CONFIDENCE |
 | Gimbal | GIMBAL_ANGLES | ANGULAR, POSITION_2D |
@@ -89,7 +91,7 @@ Each tracker supports specific data types:
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      TrackerFactory                              │
-│  - Registry pattern (5 BaseTracker implementations)             │
+│  - Registry pattern (6 BaseTracker implementations)             │
 │  - create_tracker(algorithm, video_handler, detector, ...)      │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
@@ -108,6 +110,7 @@ Each tracker supports specific data types:
 │ Classic       │   │ SmartTracker  │   │ GimbalTracker │
 │ (CSRT, KCF,   │   │ (Detection +  │   │ (External     │
 │  SparseFlow,  │   │  ByteTrack)   │   │  angles)      │
+│  VitTrack,    │   │               │   │               │
 │  dlib)        │   │               │   │               │
 └───────────────┘   └───────────────┘   └───────────────┘
 ```
@@ -122,7 +125,7 @@ In `configs/config.yaml`:
 
 ```yaml
 Tracking:
-  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, dlib, Gimbal
+  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, VitTrack, dlib, Gimbal
 ```
 
 This is the saved startup/restart default. The Dashboard Tracker control applies
@@ -199,6 +202,7 @@ if tracker.is_near_boundary():
 |------|---------|
 | `configs/config.yaml` | Runtime configuration (`Tracking.DEFAULT_TRACKING_ALGORITHM`, SmartTracker settings) |
 | `configs/tracker_schemas.yaml` | Tracker schema definitions, UI metadata |
+| `configs/tracker_artifacts.json` | Pinned model artifacts for classic trackers |
 | `configs/config_schema.yaml` | Schema validation for config |
 
 ---

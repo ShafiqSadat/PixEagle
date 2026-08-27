@@ -23,6 +23,7 @@ def test_classic_tracker_catalog_requires_scenario_evidence():
         "CSRTTracker",
         "KCFKalmanTracker",
         "SparseFlowTracker",
+        "VitTrackTracker",
         "DlibTracker",
     ):
         tracker = catalog[tracker_name]

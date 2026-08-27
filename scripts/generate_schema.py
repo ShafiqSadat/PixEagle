@@ -21,6 +21,7 @@ Output:
 """
 
 import copy
+import json
 import re
 import yaml
 from pathlib import Path
@@ -58,6 +59,7 @@ SECTION_CATEGORIES = {
     'KCF_Tracker': {'category': 'tracking', 'display_name': 'KCF Tracker', 'icon': 'track_changes'},
     'DLIB_Tracker': {'category': 'tracking', 'display_name': 'dlib Tracker', 'icon': 'track_changes'},
     'SparseFlow_Tracker': {'category': 'tracking', 'display_name': 'Sparse Flow Tracker', 'icon': 'track_changes'},
+    'VitTrack_Tracker': {'category': 'tracking', 'display_name': 'VitTrack Tracker', 'icon': 'track_changes'},
     'ClassicTracker_Common': {'category': 'tracking', 'display_name': 'Classic Tracker Common', 'icon': 'tune'},
     'SmartTracker': {'category': 'tracking', 'display_name': 'Smart Tracker (YOLO)', 'icon': 'smart_toy'},
     'GimbalTracker': {'category': 'tracking', 'display_name': 'Gimbal Tracker', 'icon': 'control_camera'},
@@ -229,9 +231,62 @@ def load_follower_config_options() -> List[Dict[str, str]]:
     return options
 
 
+def load_tracker_artifact_options() -> List[Dict[str, str]]:
+    """Build tracker-model choices from the checked-in artifact registry."""
+    repo_root = Path(__file__).resolve().parents[1]
+    manifest_path = repo_root / 'configs' / 'tracker_artifacts.json'
+    payload = json.loads(manifest_path.read_text(encoding='utf-8'))
+    artifacts = payload.get('artifacts')
+    if payload.get('schema_version') != 1 or not isinstance(artifacts, dict):
+        raise ValueError('tracker_artifacts.json has an unsupported schema')
+    options = []
+    for artifact_id, record in artifacts.items():
+        if not isinstance(record, dict) or not isinstance(record.get('name'), str):
+            raise ValueError(f'Invalid tracker artifact record: {artifact_id!r}')
+        options.append({
+            'value': artifact_id,
+            'label': record['name'],
+            'description': (
+                f"{record.get('publisher', 'Unknown publisher')}; "
+                f"{record.get('license', 'license not recorded')}"
+            ),
+        })
+    return options
+
+
 # Manual schema overrides for parameters where comment parsing is ambiguous.
 # Applied AFTER auto-generation. Keys are "SectionName.PARAM_NAME".
 SCHEMA_OVERRIDES = {
+    'VitTrack_Tracker.artifact_id': {
+        'options': load_tracker_artifact_options(),
+        'description': 'Checksum-pinned model entry from configs/tracker_artifacts.json',
+    },
+    'VitTrack_Tracker.model_path_override': {
+        'description': (
+            'Optional custom ONNX path under models/; also set its SHA-256 override'
+        ),
+    },
+    'VitTrack_Tracker.model_sha256_override': {
+        'description': (
+            'Required SHA-256 when a custom VitTrack model path is configured'
+        ),
+    },
+    'VitTrack_Tracker.model_max_bytes': {
+        'min': 1024,
+        'max': 67108864,
+        'unit': 'bytes',
+        'description': 'Maximum accepted custom VitTrack ONNX artifact size',
+    },
+    'VitTrack_Tracker.backend_id': {
+        'min': 0,
+        'max': 100,
+        'description': 'OpenCV DNN backend numeric ID; zero selects the portable default',
+    },
+    'VitTrack_Tracker.target_id': {
+        'min': 0,
+        'max': 100,
+        'description': 'OpenCV DNN target numeric ID; zero selects CPU',
+    },
     'FOLLOWER_CIRCUIT_BREAKER': {
         'reload_tier': 'immediate',
         'reboot_required': False,
@@ -1184,6 +1239,7 @@ SECTION_RELOAD_TIERS = {
     'KCF_Tracker': 'tracker_restart',
     'DLIB_Tracker': 'tracker_restart',
     'SparseFlow_Tracker': 'tracker_restart',
+    'VitTrack_Tracker': 'tracker_restart',
     'GimbalTracker': 'tracker_restart',
     'GimbalTrackerSettings': 'tracker_restart',
     'Detector': 'tracker_restart',

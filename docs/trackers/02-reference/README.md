@@ -13,6 +13,7 @@ This section provides comprehensive reference documentation for each tracker typ
 | [CSRT](csrt-tracker.md) | OpenCV CSRT | Medium | Scale-adaptive short-term tracking |
 | [KCF + Kalman](kcf-kalman-tracker.md) | KCF with Kalman | Lower | Short-term tracking with motion estimates |
 | [Sparse Flow](sparse-flow-tracker.md) | Validated sparse optical flow | Scenario-dependent | High-rate short-term point tracking |
+| [VitTrack](vittrack-tracker.md) | OpenCV model-backed tracker | Scenario-dependent | Appearance-aware short-term tracking |
 | [dlib Correlation](dlib-tracker.md) | dlib correlation | Lower | Optional correlation backend with PSR |
 | [Gimbal Tracker](gimbal-tracker.md) | External angles | External | Provider-normalized gimbal observations |
 | [SmartTracker](smart-tracker.md) | Detector + association | Model-dependent | Detection, identity association, classification |
@@ -33,22 +34,22 @@ exact configuration and computer.
 | CSRT | CPU | App-owned bounded detector recovery after a rejected measurement |
 | KCF + Kalman | CPU | Prediction can guide recovery; prediction is not command-eligible measurement |
 | Sparse Flow | CPU | Forward-backward failure is fail-closed; app owns bounded recovery |
+| VitTrack | CPU by default | Native confidence plus app-owned bounded detector recovery |
 | dlib | CPU | App-owned bounded detector recovery when configured |
 | Gimbal | Provider-dependent | Provider freshness and validity contract |
 | SmartTracker | CPU/GPU/model-dependent | Detector association with tentative/confirmed lifecycle |
 
 ### Feature Matrix
 
-| Feature | CSRT | KCF | Sparse Flow | dlib | Gimbal | Smart |
-|---------|------|-----|-------------|------|--------|-------|
-| Multi-target | - | - | - | - | - | Yes |
-| Object classification | - | - | - | - | - | Yes |
-| Internal Kalman | - | Yes | - | - | - | - |
-| Forward-backward validation | - | - | Yes | - | - | - |
-| PSR confidence | - | - | - | Yes | - | - |
-| External data source | - | - | - | - | Yes | - |
-| Scale adaptation | Yes | Limited | Yes | Yes | N/A | Model-dependent |
-| Identity recovery guarantee | No | No | No | No | Provider-dependent | No; benchmark association policy |
+| Feature | CSRT | KCF | Sparse Flow | VitTrack | dlib | Gimbal | Smart |
+|---------|------|-----|-------------|----------|------|--------|-------|
+| Multi-target | - | - | - | - | - | - | Yes |
+| Object classification | - | - | - | - | - | - | Yes |
+| Internal Kalman | - | Yes | - | - | - | - | - |
+| Forward-backward validation | - | - | Yes | - | - | - | - |
+| Native confidence | - | - | - | Yes | PSR | Provider | Model |
+| Scale adaptation | Yes | Limited | Yes | Yes | Yes | N/A | Model-dependent |
+| Identity recovery guarantee | No | No | No | No | No | Provider-dependent | No; benchmark association policy |
 
 ---
 
@@ -76,6 +77,12 @@ exact configuration and computer.
 - A model-free Core-profile backend is required
 - Recorded-scene evidence beats CSRT/KCF on the intended computer
 
+### Choose VitTrack When:
+- An appearance-aware short-term tracker is useful
+- Its verified 715 KB model and OpenCV VitTrack API are available
+- Recorded evidence beats the model-free candidates on the intended computer
+- Ambiguous loss should remain fail-closed for shared detector recovery
+
 ### Choose Gimbal Tracker When:
 - External gimbal hardware provides angles
 - No image processing overhead desired
@@ -95,7 +102,7 @@ exact configuration and computer.
 
 ```yaml
 Tracking:
-  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, dlib, Gimbal
+  DEFAULT_TRACKING_ALGORITHM: "CSRT"  # CSRT, KCF, SparseFlow, VitTrack, dlib, Gimbal
 
 Estimator:
   USE_ESTIMATOR: true
@@ -129,7 +136,7 @@ GimbalTracker:
 Each tracker produces output in specific schemas:
 
 ```python
-# CSRT, KCF, SparseFlow, dlib - POSITION_2D
+# CSRT, KCF, SparseFlow, VitTrack, dlib - POSITION_2D
 TrackerOutput(
     data_type=TrackerDataType.POSITION_2D,
     position_2d=(0.1, -0.2),  # Normalized

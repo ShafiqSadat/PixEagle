@@ -69,6 +69,24 @@ error, geometry inliers, appearance confidence, false locks, and update latency
 on the same clip. Raising error limits can preserve continuity while also
 accepting drift, so treat those metrics together.
 
+### VitTrack
+
+Use VitTrack as the model-backed appearance candidate:
+
+```yaml
+Tracking:
+  DEFAULT_TRACKING_ALGORITHM: "VitTrack"
+
+VitTrack_Tracker:
+  artifact_id: "opencv_vittrack_2023sep"
+  backend_id: 0
+  target_id: 0
+```
+
+Run `make install-tracker-artifacts` if setup marked its small pinned model
+unavailable. Compare native score, combined confidence, false locks, and latency
+against the same clip and initial ROI used for CSRT and Sparse Flow.
+
 ### dlib
 
 Use dlib only after the optional runtime passes its capability check:
@@ -138,6 +156,22 @@ KCF_Tracker:
 
 Kalman settings change prediction and candidate consistency. They do not make a
 prediction command eligible.
+
+### VitTrack Model And Validation
+
+```yaml
+VitTrack_Tracker:
+  native_score_threshold: 0.20
+  model_score_weight: 0.65
+  confidence_threshold: 0.40
+  max_motion_per_frame: 0.60
+  max_scale_change_per_frame: 0.60
+  validation_consensus_frames: 3
+```
+
+The native threshold controls OpenCV proposals; the combined threshold also
+includes PixEagle motion and appearance evidence. Tune them separately and keep
+ambiguous recovery fail-closed.
 
 ### dlib PSR and Motion
 
@@ -216,6 +250,7 @@ and decode behavior rather than tracker quality by itself.
 - [Parameter reference](parameter-reference.md)
 - [CSRT](../02-reference/csrt-tracker.md)
 - [KCF + Kalman](../02-reference/kcf-kalman-tracker.md)
+- [VitTrack](../02-reference/vittrack-tracker.md)
 - [dlib](../02-reference/dlib-tracker.md)
 - [SmartTracker](../02-reference/smart-tracker.md)
 - [Detection model catalog](../../MODEL_CATALOG.md)

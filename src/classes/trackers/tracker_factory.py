@@ -34,6 +34,7 @@ Supported Algorithms:
 - "KCF": KCF + Kalman Filter Tracker
 - "dlib": dlib Correlation Filter Tracker (fast, PSR-based confidence)
 - "SparseFlow": Sparse optical flow with forward-backward validation
+- "VitTrack": OpenCV model-backed visual tracker
 - "Gimbal": Gimbal-based UDP Angle Tracker
 - Additional trackers can be added by implementing their classes and updating the factory.
 
@@ -49,6 +50,7 @@ from classes.trackers.kcf_kalman_tracker import KCFKalmanTracker
 from classes.trackers.gimbal_tracker import GimbalTracker
 from classes.trackers.dlib_tracker import DlibTracker
 from classes.trackers.sparse_flow_tracker import SparseFlowTracker
+from classes.trackers.vittrack_tracker import VitTrackTracker
 
 # Tracker registry - maps algorithm names to tracker classes
 # To add a new tracker: 1) Import the class above, 2) Add entry to this registry
@@ -57,6 +59,7 @@ TRACKER_REGISTRY = {
     "KCF": KCFKalmanTracker,
     "dlib": DlibTracker,
     "SparseFlow": SparseFlowTracker,
+    "VitTrack": VitTrackTracker,
     "Gimbal": GimbalTracker,
 }
 

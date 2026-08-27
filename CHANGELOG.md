@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## Version 7.2.0 (2026-08-26) - VitTrack Candidate
+
+- Add `VitTrack`, an opt-in OpenCV model-backed classic tracker that combines
+  native model confidence with PixEagle's shared motion, scale, appearance,
+  freshness, estimator, and bounded recovery contracts. CSRT remains the
+  default, ambiguous recovery remains fail-closed, and no field or identity
+  guarantee is claimed without representative target-hardware evidence.
+- Add a checksum-pinned OpenCV Zoo artifact registry and atomic installer.
+  Guided Linux setup quietly installs or reuses the 715 KB Apache-2.0 model;
+  acquisition failure degrades only VitTrack, never the Core installation.
+  Advanced operators can configure an owner-controlled custom model only with
+  an explicit SHA-256.
+- Extend the equal-input classic-tracker benchmark, generated Settings schema,
+  tracker catalog, setup summary, and operator/developer documentation for
+  repeatable VitTrack comparison and tuning.
+
 ## Version 7.1.2 (2026-08-26) - Shared Classic Recovery
 
 - Replace the fixed classic-tracker re-detection crop with one shared,

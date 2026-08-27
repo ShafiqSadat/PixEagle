@@ -7,10 +7,18 @@ import pytest
 
 from tools.benchmark_classic_tracker import (
     bbox_iou,
+    build_parser,
     center_error,
     load_annotations,
     parse_bbox,
 )
+
+
+def test_benchmark_accepts_vittrack():
+    args = build_parser().parse_args(
+        ["--video", "clip.mp4", "--tracker", "VitTrack", "--bbox", "1,2,30,40"]
+    )
+    assert args.tracker == "VitTrack"
 
 
 def test_bbox_metrics_are_deterministic():

@@ -124,13 +124,17 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _ensure_sparse_flow_config() -> str:
-    if hasattr(Parameters, "SparseFlow_Tracker"):
+def _ensure_tracker_config(tracker_name: str) -> str:
+    section = {
+        "SparseFlow": "SparseFlow_Tracker",
+        "VitTrack": "VitTrack_Tracker",
+    }.get(tracker_name)
+    if section is None or hasattr(Parameters, section):
         return "runtime_config"
     defaults = yaml.safe_load(
         (PROJECT_ROOT / "configs/config_default.yaml").read_text(encoding="utf-8")
     )
-    Parameters.SparseFlow_Tracker = defaults["SparseFlow_Tracker"]
+    setattr(Parameters, section, defaults[section])
     return "checked_in_defaults"
 
 
@@ -164,11 +168,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     if not video_path.is_file():
         raise FileNotFoundError(f"video not found: {video_path}")
     annotations = load_annotations(args.annotations)
-    config_source = (
-        _ensure_sparse_flow_config()
-        if args.tracker == "SparseFlow"
-        else "runtime_config"
-    )
+    config_source = _ensure_tracker_config(args.tracker)
 
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -295,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument(
         "--tracker",
-        choices=("CSRT", "KCF", "SparseFlow", "dlib"),
+        choices=("CSRT", "KCF", "SparseFlow", "VitTrack", "dlib"),
         default="SparseFlow",
     )
     parser.add_argument("--bbox", type=parse_bbox, required=True)

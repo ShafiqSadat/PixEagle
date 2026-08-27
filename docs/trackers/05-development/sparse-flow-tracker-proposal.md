@@ -108,7 +108,8 @@ make tracking worse. Add it only if the benchmark shows a repeatable gain.
   controls, and Core OpenCV capability checks.
 - Deterministic translation, occlusion, stale-proposal, confidence, output, and
   factory tests.
-- Equal-input short-term benchmark runner for CSRT, KCF, Sparse Flow, and dlib,
+- Equal-input short-term benchmark runner for CSRT, KCF, Sparse Flow, VitTrack,
+  and dlib,
   with optional ground-truth metrics.
 - Standard measured/prediction-only/follower-eligibility output; no tracker-local
   prediction or recovery state machine.

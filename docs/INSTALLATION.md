@@ -187,9 +187,12 @@ The `scripts/init.sh` (or `make init`) performs a 10-step setup:
    by default, or backs up and resets both when explicitly requested
 8. **MAVSDK Server** - Downloads manifest-pinned platform binary with SHA-256 verification
 9. **MAVLink2REST** - Downloads manifest-pinned REST API bridge with SHA-256 verification
-10. **Optional Components** - Asks separate yes/no questions for dlib,
-    OpenCV/GStreamer, a Bash directory shortcut, standalone service controls,
-    boot auto-start, and SSH login hints. Each question displays its default.
+10. **Tracker Artifacts and Optional Components** - Quietly verifies or
+    acquires small checksum-pinned model files used by model-backed classic
+    trackers, then asks separate yes/no questions for dlib, OpenCV/GStreamer, a
+    Bash directory shortcut, standalone service controls, boot auto-start, and
+    SSH login hints. Each question displays its default. An artifact failure
+    degrades only its tracker.
 
 The verified Python environment is committed before Node/dashboard setup. A
 later Node, npm, configuration, or network failure therefore remains visible
@@ -206,6 +209,12 @@ reuse requires the configured version and tracker API; OpenCV/GStreamer reuse
 requires the builder-owned version and runtime capabilities. Otherwise only the
 affected setup path is reconciled. An interrupted mutation never publishes a
 successful state, so the next run repairs it.
+
+The default VitTrack artifact is 715 KB and is reused when its exact size and
+SHA-256 still match `configs/tracker_artifacts.json`. Setup does not ask another
+question for this small Core capability. It never overwrites a mismatched file;
+other trackers remain available and `make install-tracker-artifacts` provides
+the focused repair path.
 
 For OpenCV/GStreamer, the live reuse gate requires the builder's current exact
 OpenCV version, a source provider inside the selected PixEagle venv, GStreamer,

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "artifacts": {
+    "opencv_vittrack_2023sep": {
+      "name": "OpenCV VitTrack 2023-09",
+      "version": "2023sep",
+      "install_by_default": true,
+      "destination": "models/classic/opencv_vittrack_2023sep.onnx",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_tracking_vittrack/object_tracking_vittrack_2023sep.onnx",
+      "sha256": "2990f0b7cd44d92afa48cd97db6de7be113fc1d9594fddb74e2725c10478e91d",
+      "size_bytes": 714726,
+      "publisher": "OpenCV Zoo",
+      "source_commit": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+      "source_url": "https://github.com/opencv/opencv_zoo/tree/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_tracking_vittrack",
+      "license": "Apache-2.0",
+      "license_url": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_tracking_vittrack/LICENSE"
+    }
+  }
+}

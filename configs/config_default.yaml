@@ -348,9 +348,8 @@ TrackerSafety:
 # ==============================================================================
 # CLASSIC TRACKER COMMON SETTINGS
 # ==============================================================================
-# Shared defaults for all classic trackers (CSRT, KCF, Sparse Flow, dlib).
-# Individual tracker sections (CSRT_Tracker, KCF_Tracker, SparseFlow_Tracker, DLIB_Tracker)
-# override these values when set.
+# Shared defaults for all classic trackers (CSRT, KCF, Sparse Flow, VitTrack,
+# dlib). Individual tracker sections override these values when set.
 ClassicTracker_Common:
   appearance_update_min_confidence: 0.55  # Minimum confidence for appearance updates
   max_scale_change_per_frame: 0.4         # Maximum accepted scale change per frame
@@ -431,6 +430,39 @@ CSRT_Tracker:
   # After a rejection, require consecutive valid candidates before publication.
   enable_multiframe_validation: true
   validation_consensus_frames: 3
+
+# ==============================================================================
+# VITTRACK CONFIGURATION (OpenCV model-backed classic tracker)
+# ==============================================================================
+# VitTrack is an appearance-aware short-term tracker. It can improve proposal
+# quality through blur and appearance change, but cannot prove identity after a
+# full occlusion or when several targets are visually indistinguishable. Shared
+# detector recovery remains responsible for bounded reacquisition.
+VitTrack_Tracker:
+  performance_mode: "robust"             # legacy, balanced, robust validation cost
+
+  # The checked-in registry is the default source of truth. Advanced users may
+  # supply both overrides for another reviewed ONNX artifact under models/.
+  artifact_id: "opencv_vittrack_2023sep"
+  model_path_override: ""
+  model_sha256_override: ""
+  model_max_bytes: 16777216               # Custom-model bound; maximum 64 MiB
+
+  backend_id: 0                           # OpenCV DNN backend ID; 0 selects default
+  target_id: 0                            # OpenCV DNN target ID; 0 selects CPU
+  native_score_threshold: 0.20            # OpenCV proposal gate (0.0-1.0)
+  model_score_weight: 0.65                 # Native score contribution to confidence
+
+  confidence_threshold: 0.40              # PixEagle combined measurement gate
+  failure_threshold: 5                    # Failures before one confirmed-loss warning
+  confidence_smoothing: 0.65              # EMA alpha (0.0-1.0)
+  validation_start_frame: 5               # Grace period before motion/scale gates
+  max_scale_change_per_frame: 0.60        # Maximum accepted scale delta
+  max_motion_per_frame: 0.60              # Maximum frame-diagonal motion fraction
+  appearance_learning_rate: 0.05          # Accepted appearance-template update rate
+  appearance_update_min_confidence: 0.60  # Withhold updates below this confidence
+  enable_multiframe_validation: true      # Require consensus after a rejection
+  validation_consensus_frames: 3          # Consecutive valid proposals to republish
 
 # ==============================================================================
 # SPARSE FLOW TRACKER CONFIGURATION

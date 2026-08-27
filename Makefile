@@ -21,7 +21,7 @@
 .PHONY: help init repair setup-status demo run dev stop stop-legacy clean update reset-config setup-profile quick-browser-demo quick-browser-demo-cleanup \
         qgc-video-profile qgc-direct-media-profile demo-lan-browser-profile unsafe-demo-lan-media-profile production-remote-profile status logs \
         check-gstreamer-runtime managed-sih-doctor follower-contract-test \
-        download-binaries binary-download-plan service-install service-uninstall service-enable \
+        download-binaries binary-download-plan install-tracker-artifacts tracker-artifact-plan service-install service-uninstall service-enable \
         service-disable service-status service-logs service-attach phase0-check \
         sitl-dry-run sitl-probe sitl-sih-dry-run sitl-sih-probe \
         sitl-sih-execute-px4 sitl-gazebo-dry-run sitl-gazebo-probe \
@@ -55,6 +55,10 @@ help:
 	@echo "    make download-binaries Download MAVSDK and MAVLink2REST binaries"
 	@echo "    make binary-download-plan"
 	@echo "                            Preview pinned binary URLs/checksums"
+	@echo "    make install-tracker-artifacts"
+	@echo "                            Install/verify model-backed classic tracker artifacts"
+	@echo "    make tracker-artifact-plan"
+	@echo "                            Preview pinned tracker model URLs/checksums"
 	@echo "    make setup-profile     Apply an explicit setup profile"
 	@echo "    make qgc-video-profile Configure field QGC video (GCS_HOST=<ip>)"
 	@echo "    make check-gstreamer-runtime"
@@ -162,6 +166,12 @@ download-binaries:
 
 binary-download-plan:
 	@bash scripts/setup/download-binaries.sh --all --dry-run
+
+install-tracker-artifacts:
+	@$(PYTHON) scripts/setup/install-tracker-artifacts.py
+
+tracker-artifact-plan:
+	@$(PYTHON) scripts/setup/install-tracker-artifacts.py --dry-run
 
 PROFILE ?= local_dev
 SETUP_PROFILE_ARGS ?=
