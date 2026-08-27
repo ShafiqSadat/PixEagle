@@ -4,7 +4,8 @@ Date: 2026-08-27
 
 Issue: PXE-0164
 
-Status: local software gates complete; refreshed public operator test pending
+Status: local and refreshed public browser gates complete; operator tracking
+continuity test pending
 
 ## Problem
 
@@ -50,11 +51,21 @@ Generated schema:                        42 sections / 604 parameters, current
 Python compile:                          passed
 Dashboard production build:              passed
 Git whitespace check:                    passed
+Public runtime:                           healthy, commit f33ffdeb
+Public authenticated WebRTC:              decoded 640x480, readyState 4
+Public negotiated WebSocket JPEG:         decoded 640x480, frame age 20.2 ms
+Browser page errors:                       none
 ```
+
+The public evidence used manual run
+`pixeagle_manual_7e4592b3-128f-42f6-8267-65abb354b05a`. Process-local video
+health remained fresh and reported 32 intentional real-time replay skips after
+four file loops. That count proves the catch-up path was active; it is not a
+tracker throughput benchmark or remote operator-acceptance result.
 
 ## Remaining Evidence
 
-- refreshed authenticated public browser continuity and latest-frame behavior;
+- operator visual tracking continuity on the refreshed public browser demo;
 - Raspberry Pi/Jetson/Ubuntu actual-camera full-loop cadence;
 - annotated identity-switch, false-lock, recovery, and IoU comparisons.
 
