@@ -2443,7 +2443,17 @@ class AppController:
             None,
         )
         try:
-            self.tracker.reinitialize_tracker(frame, bbox)
+            recovery_initializer = getattr(
+                self.tracker,
+                "reinitialize_for_recovery",
+                None,
+            )
+            if callable(recovery_initializer):
+                recovery_initializer(frame, bbox)
+            else:
+                # Compatibility path for custom trackers written before the
+                # continuity-preserving recovery contract.
+                self.tracker.reinitialize_tracker(frame, bbox)
             if detector_identity is not None and callable(restore_identity):
                 restore_identity(detector_identity)
             set_latest_bbox = getattr(self.detector, "set_latest_bbox", None)

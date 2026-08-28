@@ -125,6 +125,7 @@ API_V1_CONTRACT_CLASS_NAMES = {
     "APIAuthUserUpdateRequest",
     "APIConfigRuntimePendingChange",
     "APIConfigRestartActionStatus",
+    "APIConfigSourceGenerationStatus",
     "APIConfigRuntimeStatusResponse",
     "APIErrorResponse",
     "APIFollowingCommandPublicationStatus",

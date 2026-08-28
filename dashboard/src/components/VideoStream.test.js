@@ -449,6 +449,8 @@ describe('VideoStream browser-session media authorization', () => {
       latest_frame_ack: true,
     }));
 
+    // The mocked renderer callback runs outside Testing Library and updates React state.
+    // eslint-disable-next-line testing-library/no-unnecessary-act
     act(() => {
       rendererOptions.onRender({
         frame_id: 42,

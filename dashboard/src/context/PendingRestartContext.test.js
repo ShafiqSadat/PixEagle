@@ -11,7 +11,11 @@ jest.mock('../services/apiClient', () => ({
   apiFetchJson: jest.fn(),
 }));
 
-const runtimeStatus = ({ pending = true, available = true } = {}) => ({
+const runtimeStatus = ({
+  pending = true,
+  available = true,
+  sourceGeneration = 'current',
+} = {}) => ({
   schema_version: 1,
   source: 'config_service',
   startup_snapshot_timestamp: pending ? 1770000000 : 1770000001,
@@ -27,6 +31,14 @@ const runtimeStatus = ({ pending = true, available = true } = {}) => ({
     startup_value: 5077,
     persisted_value: 5078,
   }] : [],
+  source_generation: {
+    state: sourceGeneration,
+    restart_required: sourceGeneration !== 'current',
+    message: sourceGeneration === 'current'
+      ? 'Loaded configuration definitions match the current source.'
+      : 'Configuration definitions changed while this PixEagle process was running. Restart PixEagle to load one consistent source generation.',
+    changed_sources: sourceGeneration === 'current' ? [] : ['defaults', 'schema'],
+  },
   restart_action: {
     available,
   },
@@ -105,6 +117,18 @@ describe('persistent pending restart state', () => {
     });
     expect(screen.queryByText('System restart required')).not.toBeInTheDocument();
     expect(apiFetchJson).toHaveBeenCalledTimes(2);
+  });
+
+  test('explains when an external source update requires a restart', async () => {
+    apiFetchJson.mockResolvedValue(runtimeStatus({ sourceGeneration: 'changed' }));
+
+    renderRestartUi();
+
+    expect(await screen.findByText('PixEagle update needs restart')).toBeInTheDocument();
+    expect(screen.getByText(
+      'Configuration definitions changed while this PixEagle process was running. Restart PixEagle to load one consistent source generation.'
+    )).toBeInTheDocument();
+    expect(screen.queryByText('Config restart status unavailable')).not.toBeInTheDocument();
   });
 
   test('posts a confirmed idempotent action and polls until the backend reconnects', async () => {

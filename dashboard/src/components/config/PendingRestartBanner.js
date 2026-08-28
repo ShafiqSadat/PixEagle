@@ -44,18 +44,38 @@ const PendingRestartBanner = () => {
   } = usePendingRestart();
 
   const restartDisabled = !restartActionAvailable || restarting;
+  const sourceGenerationState = runtimeStatus?.source_generation?.state;
   const unavailableMessage = restartAvailabilityMessage(
     runtimeStatus?.restart_action?.reason
   );
   const restartTooltip = restartActionAvailable
     ? 'Restart PixEagle to apply pending system configuration'
     : unavailableMessage;
+  let bannerTitle = 'System restart required';
+  let bannerMessage = 'Saved system configuration is waiting for a PixEagle restart.';
+  if (statusUnavailable) {
+    bannerTitle = 'Config restart status unavailable';
+    bannerMessage = error;
+  } else if (restarting) {
+    bannerTitle = 'Restart requested';
+    bannerMessage = `Reconnecting to PixEagle${reconnectAttempt > 0 ? ` (attempt ${reconnectAttempt})` : ''}...`;
+  } else if (sourceGenerationState === 'changed') {
+    bannerTitle = 'PixEagle update needs restart';
+    bannerMessage = runtimeStatus.source_generation.message;
+  } else if (sourceGenerationState === 'unavailable') {
+    bannerTitle = 'Config definitions need attention';
+    bannerMessage = runtimeStatus.source_generation.message;
+  }
 
   return (
     <>
       {(pendingRestart || restarting || statusUnavailable) && (
         <Alert
-          severity={statusUnavailable ? 'error' : (restarting ? 'info' : 'warning')}
+          severity={
+            statusUnavailable || sourceGenerationState === 'unavailable'
+              ? 'error'
+              : (restarting ? 'info' : 'warning')
+          }
           variant="outlined"
           icon={<RestartAltIcon fontSize="small" />}
           sx={{
@@ -78,16 +98,10 @@ const PendingRestartBanner = () => {
           >
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="subtitle2" component="div">
-                {statusUnavailable
-                  ? 'Config restart status unavailable'
-                  : (restarting ? 'Restart requested' : 'System restart required')}
+                {bannerTitle}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {statusUnavailable
-                  ? error
-                  : restarting
-                  ? `Reconnecting to PixEagle${reconnectAttempt > 0 ? ` (attempt ${reconnectAttempt})` : ''}...`
-                  : 'Saved system configuration is waiting for a PixEagle restart.'}
+                {bannerMessage}
               </Typography>
               {pendingRestart && !restartActionAvailable && !restarting && (
                 <Typography variant="caption" color="warning.dark">

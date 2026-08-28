@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Preserve shared Kalman motion state when detector recovery re-seeds a classic
+  tracker, and render only the prediction committed for the current failed
+  frame. Prediction and tentative recovery remain follower-ineligible until a
+  fresh measured update succeeds.
+- Detect defaults/schema/retirement files replaced beneath a running backend as
+  one source-generation change. The config runtime API and dashboard now ask
+  for a restart instead of mixing generations and reporting a misleading
+  retirement-schema failure.
 - Separate visual-tracker command freshness from continuity recovery. A
   rejected frame remains immediately ineligible for follower commands, while
   CSRT, KCF, SparseFlow, VitTrack, DaSiamRPN, dlib, and future `BaseTracker`

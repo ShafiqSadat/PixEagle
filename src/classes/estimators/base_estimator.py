@@ -56,6 +56,21 @@ class BaseEstimator(ABC):
         """Return whether this estimator currently owns a target state."""
         return self.get_estimate() is not None
 
+    def snapshot_state(self):
+        """Return optional state for continuity-preserving tracker recovery.
+
+        Estimators may implement this small, optional protocol when a tracker
+        is re-seeded from a detector candidate.  Returning ``None`` is valid:
+        the caller then uses the estimator's normal reset/reinitialization
+        behavior.  Snapshots are diagnostic/runtime objects and must not be
+        persisted as configuration or operator data.
+        """
+        return None
+
+    def restore_state(self, snapshot) -> bool:
+        """Restore a state produced by :meth:`snapshot_state`, if supported."""
+        return False
+
     @abstractmethod
     def predict_and_update(self, measurement):
         """

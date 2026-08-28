@@ -141,6 +141,15 @@ automatically.
   components usable without silently rewriting the operator's config; an
   explicit sync or reset is still required to persist the new values.
 
+### Running Process After A Source Update
+
+Defaults, schema, and the retirement registry are one definition generation.
+A running backend never mixes files from a later `git pull` with its older
+in-memory generation. `GET /api/v1/config/runtime-status` instead reports a
+structured restart-required source state, and the dashboard explains that the
+PixEagle process must restart. After source files are repaired or updated,
+restart the same owned manual or managed runtime before reviewing Config Sync.
+
 Manual redacted status:
 
 ```bash

@@ -11,6 +11,14 @@ seeds the estimator at the exact image position. Accepted measurements update
 the filter with measured monotonic frame time; failed frames may advance it
 within the configured horizon.
 
+The shared estimator is a constant-acceleration image-plane model, not a
+learned intent or path model. On each failed frame PixEagle commits at most one
+bounded prediction and draws that exact point. An expired or invalid prediction
+removes the marker instead of leaving a stale yellow point. Detector-assisted
+re-seeding preserves supported estimator position, velocity, and covariance
+state through the tracker replacement; the recovered candidate remains
+follower-ineligible until a subsequent measured update corrects the filter.
+
 KCF owns a separate constant-velocity Kalman filter because its validation path
 needs an internal proposal estimate. It uses the same image coordinate
 convention and real elapsed seconds:
@@ -21,6 +29,9 @@ convention and real elapsed seconds:
 
 Classic prediction is drawn as an operator hint and exposed as stale,
 prediction-only telemetry. It cannot start or sustain follower commands.
+Rapid camera motion, abrupt turns, long occlusion, or a wrong prior velocity can
+make the prediction diverge; detector recovery and operator reselection are the
+identity mechanisms, not the Kalman point.
 
 ## SmartTracker
 

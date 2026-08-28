@@ -298,6 +298,7 @@ from classes.api_v1_contracts import (
     APICircuitBreakerSetRequest,
     APIConfigRuntimePendingChange,
     APIConfigRestartActionStatus,
+    APIConfigSourceGenerationStatus,
     APIConfigRuntimeStatusResponse,
     APIErrorResponse,
     APIFrontendErrorReportRequest,

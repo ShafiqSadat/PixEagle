@@ -87,6 +87,35 @@ def test_kalman_estimator_preserves_image_axis_direction_during_prediction():
     assert predicted_state[1] == pytest.approx(measured_state[1])
 
 
+def test_kalman_estimator_snapshot_round_trip_preserves_motion_state():
+    estimator = KalmanEstimator()
+    estimator.initialize([100.0, 80.0])
+    estimator.set_dt(0.1)
+    estimator.predict_and_update([110.0, 80.0])
+    snapshot = estimator.snapshot_state()
+    state_before = estimator.get_estimate()
+    covariance_before = estimator.filter.P.copy()
+
+    assert snapshot is not None
+    assert estimator.predict_only() is True
+    assert estimator.restore_state(snapshot) is True
+    assert estimator.get_estimate() == pytest.approx(state_before)
+    assert estimator.filter.P == pytest.approx(covariance_before)
+
+
+def test_kalman_estimator_rejects_malformed_continuity_snapshot():
+    estimator = KalmanEstimator()
+
+    assert estimator.restore_state({"initialized": True}) is False
+    assert estimator.restore_state({
+        "initialized": True,
+        "x": [[float("nan")]] * 6,
+        "P": [[1.0]],
+        "dt": 0.1,
+        "prediction_age_seconds": 0.0,
+    }) is False
+
+
 def test_estimator_factory_creates_supported_estimator():
     """Factory should create supported estimators by stable algorithm name."""
     estimator = create_estimator("Kalman")

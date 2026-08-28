@@ -52,6 +52,8 @@ class ConcreteTracker:
         self.center = None
         self.normalized_bbox = None
         self.normalized_center = None
+        self.predicted_bbox = None
+        self.predicted_center = None
         self.center_history = deque(maxlen=Parameters.CENTER_HISTORY_LENGTH)
 
         self.tracking_started = False
@@ -94,6 +96,7 @@ class ConcreteTracker:
         # Bind Phase 3 methods needed by get_output/reset
         for name in ['_build_output', '_get_velocity_from_estimator',
                       'get_tracking_continuity',
+                      '_get_committed_prediction_position',
                       'compute_motion_confidence', '_build_failure_info',
                       '_record_loss_start', '_check_out_of_frame',
                       '_update_out_of_frame_status', '_smooth_confidence',
@@ -846,6 +849,64 @@ class TestEstimatorPrediction:
         tracker.position_estimator.set_dt.assert_called_once_with(0.125)
         tracker.position_estimator.predict_only.assert_called_once_with()
         assert tracker.predicted_bbox == (8, 11, 8, 6)
+
+    def test_loss_prediction_clears_expired_overlay_state(self):
+        tracker = create_test_tracker()
+        tracker.estimator_enabled = True
+        tracker.position_estimator = MagicMock()
+        tracker.position_estimator.predict_only.return_value = False
+        tracker.predicted_bbox = (8, 11, 8, 6)
+        tracker.predicted_center = (12.0, 14.0)
+
+        from classes.trackers.base_tracker import BaseTracker
+        BaseTracker.update_estimator_without_measurement(tracker)
+
+        assert tracker.predicted_bbox is None
+        assert tracker.predicted_center is None
+
+    def test_loss_overlay_uses_committed_prediction_position(self):
+        tracker = create_test_tracker()
+        tracker.estimator_enabled = True
+        tracker.predicted_center = (123.25, 77.5)
+        tracker.position_estimator = MagicMock()
+        tracker.position_estimator.get_estimate.return_value = [999.0, 999.0]
+
+        from classes.trackers.base_tracker import BaseTracker
+        assert BaseTracker._get_committed_prediction_position(tracker) == (
+            123.25,
+            77.5,
+        )
+        with patch('classes.trackers.base_tracker.cv2.circle') as circle:
+            BaseTracker.draw_estimate(
+                tracker,
+                np.zeros((480, 640, 3), dtype=np.uint8),
+                tracking_successful=False,
+            )
+
+        assert circle.call_args.args[1] == (123, 77)
+
+    def test_recovery_reinitialization_preserves_supported_estimator_state(self):
+        tracker = create_test_tracker()
+        tracker.estimator_enabled = True
+        tracker.position_estimator = MagicMock()
+        snapshot = {"motion": "before-recovery"}
+        tracker.position_estimator.snapshot_state.return_value = snapshot
+        tracker.position_estimator.restore_state.return_value = True
+        tracker.predicted_center = (40.5, 22.25)
+        tracker.predicted_bbox = (36, 18, 9, 9)
+        tracker.reinitialize_tracker = MagicMock()
+
+        from classes.trackers.base_tracker import BaseTracker
+        BaseTracker.reinitialize_for_recovery(
+            tracker,
+            np.zeros((20, 20, 3), dtype=np.uint8),
+            (2, 3, 5, 6),
+        )
+
+        tracker.reinitialize_tracker.assert_called_once()
+        tracker.position_estimator.restore_state.assert_called_once_with(snapshot)
+        assert tracker.predicted_center == (40.5, 22.25)
+        assert tracker.predicted_bbox == (36, 18, 9, 9)
 
 
 @pytest.mark.unit

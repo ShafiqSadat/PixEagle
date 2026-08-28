@@ -157,6 +157,19 @@ class ConfigService:
     MISSING_FILE_DIGEST = hashlib.sha256(
         b"PIXEAGLE_FILE_MISSING\0"
     ).hexdigest()
+    DEFINITION_SOURCE_PATHS = {
+        "defaults": DEFAULT_PATH,
+        "schema": SCHEMA_PATH,
+        "retirements": RETIREMENTS_PATH,
+    }
+    SOURCE_GENERATION_CHANGED_MESSAGE = (
+        "Configuration definitions changed while this PixEagle process was "
+        "running. Restart PixEagle to load one consistent source generation."
+    )
+    SOURCE_GENERATION_UNAVAILABLE_MESSAGE = (
+        "PixEagle could not verify its configuration definitions. Inspect the "
+        "host files and restart after they are repaired."
+    )
     _BACKUP_ID_RE = re.compile(
         r"(?:config_\d{8}_\d{6}|config_\d{8}_\d{6}_\d{6}_[A-Za-z0-9_-]+)"
     )
@@ -182,6 +195,11 @@ class ConfigService:
         self._config_raw = None  # Raw ruamel.yaml object for round-trip
         self._default: Dict = {}
         self._audit_log: List[Dict] = []
+        # Runtime normalization must use the same retirement registry that was
+        # validated with the loaded defaults/schema. Re-reading only the
+        # registry after an external update would mix source generations.
+        self._retirement_registry_cache: Optional[Dict[str, Any]] = None
+        self._loaded_definition_source_digests: Dict[str, str] = {}
         self._project_root = (
             Path(project_root).resolve()
             if project_root is not None
@@ -279,6 +297,44 @@ class ConfigService:
             "retirements": self._file_digest(self._get_path(self.RETIREMENTS_PATH)),
             "sync_meta": self._file_digest(self._get_path(self.SYNC_META_PATH)),
             "audit_log": self._file_digest(self._get_path(self.AUDIT_LOG_PATH)),
+        }
+
+    def _get_definition_source_digests_locked(self) -> Dict[str, str]:
+        """Fingerprint the schema inputs loaded by this process."""
+        return {
+            name: self._file_digest(self._get_path(path))
+            for name, path in self.DEFINITION_SOURCE_PATHS.items()
+        }
+
+    def _get_source_generation_status_locked(self) -> Dict[str, Any]:
+        """Report whether disk definitions still match the loaded generation."""
+        loaded = dict(getattr(self, "_loaded_definition_source_digests", {}))
+        try:
+            current = self._get_definition_source_digests_locked()
+        except Exception as exc:
+            logger.warning("Could not verify configuration source generation: %s", exc)
+            return {
+                "state": "unavailable",
+                "restart_required": True,
+                "message": self.SOURCE_GENERATION_UNAVAILABLE_MESSAGE,
+                "changed_sources": [],
+            }
+
+        if loaded and current != loaded:
+            return {
+                "state": "changed",
+                "restart_required": True,
+                "message": self.SOURCE_GENERATION_CHANGED_MESSAGE,
+                "changed_sources": sorted(
+                    name for name in current if current.get(name) != loaded.get(name)
+                ),
+            }
+
+        return {
+            "state": "current",
+            "restart_required": False,
+            "message": "Loaded configuration definitions match the current source.",
+            "changed_sources": [],
         }
 
     def get_persistence_state_digests(self) -> Dict[str, Any]:
@@ -532,11 +588,20 @@ class ConfigService:
             raise FileNotFoundError(f"Config schema file not found: {schema_path}")
         if default_path.is_symlink() or not default_path.is_file():
             raise FileNotFoundError(f"Default config file not found: {default_path}")
+        candidate_definition_digests = self._get_definition_source_digests_locked()
 
         previous_schema = self._schema
         previous_default = self._default
         previous_config = self._config
         previous_config_raw = self._config_raw
+        previous_retirement_registry = getattr(
+            self, "_retirement_registry_cache", None
+        )
+        previous_definition_digests = dict(
+            getattr(self, "_loaded_definition_source_digests", {})
+        )
+        # A reload starts a new, internally consistent definition generation.
+        self._retirement_registry_cache = None
         try:
             with open(schema_path, 'r', encoding='utf-8') as schema_file:
                 loaded_schema = yaml.load(schema_file)
@@ -591,11 +656,18 @@ class ConfigService:
                     "Runtime config failed schema validation: "
                     + "; ".join(config_validation.errors)
                 )
+            if self._get_definition_source_digests_locked() != candidate_definition_digests:
+                raise RuntimeError(
+                    "Configuration definitions changed while they were being loaded; "
+                    "retry with one stable source generation"
+                )
         except Exception as exc:
             self._schema = previous_schema
             self._default = previous_default
             self._config = previous_config
             self._config_raw = previous_config_raw
+            self._retirement_registry_cache = previous_retirement_registry
+            self._loaded_definition_source_digests = previous_definition_digests
             logger.error("Config load rejected; previous in-memory state preserved: %s", exc)
             raise RuntimeError(f"Could not load configuration safely: {exc}") from exc
 
@@ -604,6 +676,7 @@ class ConfigService:
         # an upgraded operator config still contains a declared legacy alias.
         self._config = normalized_config
         self._config_raw = next_config_raw
+        self._loaded_definition_source_digests = candidate_definition_digests
         logger.info("Loaded config schema and defaults from checked-in sources")
         if config_path.exists():
             logger.info("Loaded runtime config from %s", config_path)
@@ -663,10 +736,8 @@ class ConfigService:
             return self.SYSTEM_RESTART_POLICY_LOCAL_ONLY
         return normalized
 
-    def _read_persisted_effective_config_locked(
-        self,
-    ) -> Tuple[Dict[str, Any], str, str]:
-        """Read the current effective source from disk without publishing it."""
+    def _get_persisted_source_file_locked(self) -> Tuple[Path, str]:
+        """Resolve the operator config source without normalizing its contents."""
         config_path = self._get_path(self.CONFIG_PATH)
         default_path = self._get_path(self.DEFAULT_PATH)
         if config_path.is_symlink():
@@ -674,13 +745,16 @@ class ConfigService:
         if config_path.exists():
             if not config_path.is_file() or config_path.is_symlink():
                 raise ValueError("Runtime config must be a regular non-symlink file")
-            source_path = config_path
-            source = "runtime_config"
-        else:
-            if default_path.is_symlink() or not default_path.is_file():
-                raise ValueError("Default config must be a regular non-symlink file")
-            source_path = default_path
-            source = "checked_in_defaults"
+            return config_path, "runtime_config"
+        if default_path.is_symlink() or not default_path.is_file():
+            raise ValueError("Default config must be a regular non-symlink file")
+        return default_path, "checked_in_defaults"
+
+    def _read_persisted_effective_config_locked(
+        self,
+    ) -> Tuple[Dict[str, Any], str, str]:
+        """Read the current effective source from disk without publishing it."""
+        source_path, source = self._get_persisted_source_file_locked()
 
         yaml = YAML(typ="safe")
         with open(source_path, "r", encoding="utf-8") as source_file:
@@ -1190,6 +1264,40 @@ class ConfigService:
     def get_runtime_config_status(self) -> Dict[str, Any]:
         """Return redacted system-restart changes pending for this process."""
         with self._mutation_lock:
+            source_generation = self._get_source_generation_status_locked()
+            if source_generation["state"] != "current":
+                # Do not normalize a possibly old operator config against a
+                # newly edited schema/retirement registry. Report the source
+                # mismatch directly so the dashboard can request a restart.
+                try:
+                    persisted_path, persisted_source = (
+                        self._get_persisted_source_file_locked()
+                    )
+                    persisted_digest = self._file_digest(persisted_path)
+                except Exception:
+                    persisted_source = "checked_in_defaults"
+                    persisted_digest = self.MISSING_FILE_DIGEST
+                return {
+                    "schema_version": 1,
+                    "source": "config_service",
+                    "startup_config_source": self._startup_config_source,
+                    "persisted_config_source": persisted_source,
+                    "persisted_config_digest": persisted_digest,
+                    "startup_snapshot_timestamp": self._startup_snapshot_timestamp,
+                    "startup_snapshot_immutable": True,
+                    "system_restart_policy": self.get_startup_system_restart_policy(),
+                    "restart_required": True,
+                    "pending_change_count": 0,
+                    "pending_changes": [],
+                    "source_generation": source_generation,
+                    "claim_boundary": (
+                        "Configuration definitions changed or could not be "
+                        "verified while this process was running; restart is "
+                        "required before comparing persisted settings."
+                    ),
+                    "timestamp": time.time(),
+                }
+
             startup = copy.deepcopy(self._startup_effective_config)
             persisted, persisted_source, persisted_digest = (
                 self._read_persisted_effective_config_locked()
@@ -1254,6 +1362,7 @@ class ConfigService:
                 "restart_required": bool(pending_changes),
                 "pending_change_count": len(pending_changes),
                 "pending_changes": pending_changes,
+                "source_generation": source_generation,
                 "claim_boundary": (
                     "Process-start configuration compared with the current persisted "
                     "configuration using ConfigService reload tiers; this does not "
@@ -1734,10 +1843,21 @@ class ConfigService:
     def get_retirement_registry(self) -> Dict[str, Any]:
         """Load and validate the exact, versioned config retirement registry."""
         with self._mutation_lock:
+            # Every runtime consumer uses the registry validated with this
+            # process's loaded defaults/schema. A new process is the boundary
+            # for inspecting a newly published source generation.
             return self._get_retirement_registry_locked()
 
-    def _get_retirement_registry_locked(self) -> Dict[str, Any]:
+    def _get_retirement_registry_locked(
+        self,
+        *,
+        cache: bool = True,
+    ) -> Dict[str, Any]:
         """Validate retirements against one stable defaults/schema generation."""
+        cached = getattr(self, "_retirement_registry_cache", None)
+        if cache and cached is not None:
+            return copy.deepcopy(cached)
+
         registry_path = self._get_path(self.RETIREMENTS_PATH)
         if registry_path.is_symlink() or not registry_path.is_file():
             raise FileNotFoundError(f"Config retirement registry not found: {registry_path}")
@@ -1904,7 +2024,10 @@ class ConfigService:
         registry_digest = hashlib.sha256(
             json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        return {**canonical, "registry_digest": registry_digest}
+        result = {**canonical, "registry_digest": registry_digest}
+        if cache:
+            self._retirement_registry_cache = copy.deepcopy(result)
+        return result
 
     def _path_is_active(self, path: List[str]) -> bool:
         with self._mutation_lock:

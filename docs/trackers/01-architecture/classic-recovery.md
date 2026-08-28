@@ -49,6 +49,22 @@ only. A custom tracker that does not publish this contract is handled
 conservatively and enters recovery immediately, preserving compatibility with
 older adapters.
 
+## Command And Visual Lifecycles
+
+The first rejected measurement invalidates the current pursuit intent; it does
+not immediately end the operator's follow session. The active follower may
+publish its declared inactive-target safe command, or the commander publishes
+its configured neutral/hold defaults at the fixed command cadence. PixEagle
+continues the bounded visual uncertainty/recovery lifecycle in parallel.
+
+A fresh measured tracker output can resume pursuit. Prediction-only geometry,
+the last confirmed box, and tentative detector candidates cannot. Visual
+tracking stops only after its bounded recovery deadline or an explicit operator
+action. Command-publication, Offboard-ownership, and PX4-link failures remain
+separate terminal safety paths; estimator recovery never masks them. PX4's own
+Offboard-loss timeout and action remain vehicle configuration and must be
+validated for the intended airframe.
+
 ## Search Policy
 
 Automatic recovery uses a deterministic sequence:
@@ -74,11 +90,13 @@ The template detector keeps two bounded views:
 
 Searching both views helps across scale, viewpoint, illumination, and
 background transitions. Automatic tracker reinitialization restores the
-original detector identity and does not learn from the tentative box. Only the
-existing high-confidence measured-update path may refresh the recent view, so
-one candidate cannot silently replace the selected target. This is a
-conservative online appearance aid, not semantic identity or a guarantee
-against similar distractors.
+original detector identity and does not learn from the tentative box. Trackers
+using the shared estimator preserve its pre-loss motion state across this
+re-seed, but still require a new measured tracker update before command
+eligibility resumes. Only the existing high-confidence measured-update path
+may refresh the recent view, so one candidate cannot silently replace the
+selected target. This is a conservative online appearance aid, not semantic
+identity or a guarantee against similar distractors.
 
 ## Distractor Handling
 

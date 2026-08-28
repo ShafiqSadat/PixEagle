@@ -534,6 +534,15 @@ class APIConfigRestartActionStatus(BaseModel):
     requires_idempotency_key: bool = True
 
 
+class APIConfigSourceGenerationStatus(BaseModel):
+    """Whether the process and on-disk configuration definitions agree."""
+
+    state: Literal["current", "changed", "unavailable"] = "current"
+    restart_required: bool = False
+    message: str
+    changed_sources: List[str] = Field(default_factory=list)
+
+
 class APIConfigRuntimeStatusResponse(BaseModel):
     """Typed pending-restart status derived from the immutable startup config."""
 
@@ -548,6 +557,11 @@ class APIConfigRuntimeStatusResponse(BaseModel):
     restart_required: bool
     pending_change_count: int
     pending_changes: List[APIConfigRuntimePendingChange] = Field(default_factory=list)
+    source_generation: APIConfigSourceGenerationStatus = Field(
+        default_factory=lambda: APIConfigSourceGenerationStatus(
+            message="Loaded configuration definitions match the current source."
+        )
+    )
     restart_action: APIConfigRestartActionStatus
     claim_boundary: str = CONFIG_RUNTIME_STATUS_CLAIM_BOUNDARY
     timestamp: float

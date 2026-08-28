@@ -782,6 +782,31 @@ def test_failed_redetection_initializer_rolls_back_without_raising():
     controller.tracker.stop_tracking.assert_called_once_with()
 
 
+def test_recovery_candidate_uses_estimator_preserving_tracker_contract():
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    bbox = (10, 20, 30, 40)
+    recovery_initializer = MagicMock()
+    legacy_initializer = MagicMock()
+
+    controller = object.__new__(AppController)
+    controller.tracking_started = False
+    controller.detector = SimpleNamespace(set_latest_bbox=MagicMock())
+    controller.tracker = SimpleNamespace(
+        reinitialize_for_recovery=recovery_initializer,
+        reinitialize_tracker=legacy_initializer,
+        stop_tracking=MagicMock(),
+    )
+
+    initialized, error = controller._reinitialize_recovery_candidate(frame, bbox)
+
+    assert initialized is True
+    assert error is None
+    recovery_initializer.assert_called_once_with(frame, bbox)
+    legacy_initializer.assert_not_called()
+    controller.detector.set_latest_bbox.assert_called_once_with(bbox)
+    assert controller.tracking_started is True
+
+
 def test_successful_redetection_preserves_original_detector_identity():
     from classes.detectors.template_matching_detector import (
         TemplateMatchingDetector,

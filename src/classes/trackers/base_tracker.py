@@ -79,6 +79,7 @@ class BaseTracker(ABC):
         self.normalized_bbox: Optional[Tuple[float, float, float, float]] = None
         self.normalized_center: Optional[Tuple[float, float]] = None
         self.predicted_bbox: Optional[Tuple[int, int, int, int]] = None
+        self.predicted_center: Optional[Tuple[float, float]] = None
         self.last_measurement_timestamp: Optional[float] = None
         self.center_history = deque(maxlen=Parameters.CENTER_HISTORY_LENGTH)
         self.tracking_started: bool = False
@@ -166,6 +167,7 @@ class BaseTracker(ABC):
         self.bbox = None
         self.prev_bbox = None
         self.predicted_bbox = None
+        self.predicted_center = None
         self.center = None
         self.prev_center = None
         self.normalized_bbox = None
@@ -190,6 +192,7 @@ class BaseTracker(ABC):
         self.prev_center = None
         self.prev_bbox = None
         self.predicted_bbox = None
+        self.predicted_center = None
         self.last_measurement_timestamp = None
         self.tracking_started = False
         self.override_active = False
@@ -510,6 +513,11 @@ class BaseTracker(ABC):
         """Commit one predict-only step for the current failed frame."""
         if dt is None:
             dt = getattr(self, 'last_frame_dt', 1e-3)
+        # A prediction belongs to exactly one failed frame. Clear the previous
+        # one first so an expired or unavailable estimator cannot leave a
+        # stale marker on the operator display.
+        self.predicted_bbox = None
+        self.predicted_center = None
         if self.estimator_enabled and self.position_estimator:
             self.position_estimator.set_dt(
                 BaseTracker._bounded_estimator_dt(dt)
@@ -522,12 +530,22 @@ class BaseTracker(ABC):
             if estimated_position is not None:
                 self.estimated_position_history.append(estimated_position)
             if estimated_position is not None and len(estimated_position) >= 2:
+                try:
+                    prediction_center = (
+                        float(estimated_position[0]),
+                        float(estimated_position[1]),
+                    )
+                except (TypeError, ValueError, IndexError):
+                    return
+                if not all(np.isfinite(value) for value in prediction_center):
+                    return
+                self.predicted_center = prediction_center
                 reference_bbox = self.bbox or self.prev_bbox
                 if reference_bbox:
                     width, height = reference_bbox[2], reference_bbox[3]
                     self.predicted_bbox = (
-                        int(estimated_position[0] - width / 2),
-                        int(estimated_position[1] - height / 2),
+                        int(prediction_center[0] - width / 2),
+                        int(prediction_center[1] - height / 2),
                         int(width),
                         int(height),
                     )
@@ -667,6 +685,7 @@ class BaseTracker(ABC):
             self.override_active = False
             self.bbox = None
             self.predicted_bbox = None
+            self.predicted_center = None
             self.center = None
             logger.info("[OVERRIDE] SmartTracker override cleared")
 
@@ -786,6 +805,8 @@ class BaseTracker(ABC):
 
     def set_center(self, value: Tuple[int, int]) -> None:
         self.center = value
+        # A confirmed measurement supersedes any prior loss-frame prediction.
+        self.predicted_center = None
         self.normalize_center_coordinates()
 
     def normalize_bbox(self) -> None:
@@ -939,6 +960,34 @@ class BaseTracker(ABC):
     # Visualization
     # =========================================================================
 
+    def _get_committed_prediction_position(
+        self,
+    ) -> Optional[Tuple[float, float]]:
+        """Return the prediction committed for the current failed frame.
+
+        predicted_bbox remains a compatibility surface for tracker adapters
+        with an internal motion model. The shared center is preferred when the
+        base estimator supplied it, avoiding integer rounding in the overlay.
+        """
+        prediction = getattr(self, "predicted_center", None)
+        if prediction is not None:
+            try:
+                values = (float(prediction[0]), float(prediction[1]))
+            except (TypeError, ValueError, IndexError):
+                values = None
+            if values is not None and all(np.isfinite(value) for value in values):
+                return values
+
+        predicted_bbox = getattr(self, "predicted_bbox", None)
+        if predicted_bbox is None:
+            return None
+        try:
+            x, y, width, height = (float(value) for value in predicted_bbox)
+        except (TypeError, ValueError):
+            return None
+        values = (x + width / 2.0, y + height / 2.0)
+        return values if all(np.isfinite(value) for value in values) else None
+
     def reinitialize_tracker(self, frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> None:
         logger.info(f"Reinitializing tracker with bbox: {bbox}")
         self.tracker = self._create_tracker()
@@ -947,6 +996,65 @@ class BaseTracker(ABC):
         except Exception:
             self.stop_tracking()
             raise
+
+    def reinitialize_for_recovery(
+        self,
+        frame: np.ndarray,
+        bbox: Tuple[int, int, int, int],
+    ) -> None:
+        """Re-seed the visual tracker while retaining motion continuity.
+
+        Detector recovery changes the image tracker, not necessarily the
+        target's motion. Estimators that implement the optional snapshot
+        protocol retain their position/velocity covariance across this
+        transition. Adapters without that protocol continue to use their
+        established reset behavior.
+        """
+        estimator = getattr(self, "position_estimator", None)
+        snapshot = None
+        snapshot_state = getattr(estimator, "snapshot_state", None)
+        if callable(snapshot_state):
+            try:
+                snapshot = snapshot_state()
+            except Exception as exc:
+                logger.warning(
+                    "%s estimator snapshot unavailable during recovery: %s",
+                    self.tracker_name,
+                    exc,
+                )
+
+        previous_prediction = getattr(self, "predicted_center", None)
+        previous_bbox = getattr(self, "predicted_bbox", None)
+        self.reinitialize_tracker(frame, bbox)
+
+        restore_state = getattr(estimator, "restore_state", None)
+        if snapshot is None or not callable(restore_state):
+            return
+        try:
+            restored = bool(restore_state(snapshot))
+        except Exception as exc:
+            logger.warning(
+                "%s estimator continuity restore failed during recovery: %s",
+                self.tracker_name,
+                exc,
+            )
+            return
+        if not restored:
+            logger.debug(
+                "%s estimator does not support this recovery snapshot; "
+                "continuing with the newly seeded state",
+                self.tracker_name,
+            )
+            return
+
+        # Keep the last committed prediction available until the candidate
+        # produces its first measured update. It remains display/recovery-only.
+        self.predicted_center = previous_prediction
+        self.predicted_bbox = previous_bbox
+        logger.debug(
+            "%s estimator motion state preserved across recovery",
+            self.tracker_name,
+        )
 
     def draw_tracking(self, frame: np.ndarray, tracking_successful: bool = True) -> np.ndarray:
         if self.bbox and self.center and self.video_handler:
@@ -1006,7 +1114,11 @@ class BaseTracker(ABC):
 
     def draw_estimate(self, frame: np.ndarray, tracking_successful: bool = True) -> np.ndarray:
         if self.estimator_enabled and self.video_handler:
-            estimated_position = self.get_estimated_position()
+            estimated_position = (
+                self.get_estimated_position()
+                if tracking_successful
+                else self._get_committed_prediction_position()
+            )
             if estimated_position is not None:
                 estimated_x, estimated_y = estimated_position
                 if not np.isfinite(estimated_x) or not np.isfinite(estimated_y):

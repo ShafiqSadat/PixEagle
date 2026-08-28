@@ -34,6 +34,15 @@ export const isSystemRestartPending = (runtimeStatus) => (
 );
 
 const validateRuntimeStatus = (runtimeStatus) => {
+  const sourceGeneration = runtimeStatus?.source_generation;
+  const sourceGenerationMalformed = sourceGeneration !== undefined && (
+    !sourceGeneration
+    || typeof sourceGeneration !== 'object'
+    || !['current', 'changed', 'unavailable'].includes(sourceGeneration.state)
+    || typeof sourceGeneration.restart_required !== 'boolean'
+    || typeof sourceGeneration.message !== 'string'
+    || !Array.isArray(sourceGeneration.changed_sources)
+  );
   if (
     !runtimeStatus
     || typeof runtimeStatus !== 'object'
@@ -41,6 +50,7 @@ const validateRuntimeStatus = (runtimeStatus) => {
     || typeof runtimeStatus.startup_snapshot_timestamp !== 'number'
     || !Array.isArray(runtimeStatus.pending_changes)
     || typeof runtimeStatus.restart_action?.available !== 'boolean'
+    || sourceGenerationMalformed
   ) {
     throw new Error('Config runtime status response is malformed.');
   }

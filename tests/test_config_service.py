@@ -1026,6 +1026,7 @@ class TestRuntimeConfigStatus:
         assert status["system_restart_policy"] == startup_policy
         assert status["restart_required"] is True
         assert status["pending_change_count"] == 1
+        assert status["source_generation"]["state"] == "current"
         assert status["pending_changes"] == [{
             "path": "Streaming.API_BEARER_TOKEN_FILE",
             "section": "Streaming",
@@ -1085,6 +1086,80 @@ class TestRuntimeConfigStatus:
         assert "PREPROCESSING_COLOR_SPACE" not in startup["FramePreprocessor"]
         assert status["restart_required"] is False
         assert status["pending_changes"] == []
+
+    def test_source_generation_drift_is_reported_without_mixing_retirements(
+        self,
+        tmp_path,
+    ):
+        """An update during runtime becomes an actionable restart state."""
+        configs = tmp_path / "configs"
+        configs.mkdir()
+        source_configs = Path(__file__).parent.parent / "configs"
+
+        old_default = yaml.safe_load(
+            (source_configs / "config_default.yaml").read_text(encoding="utf-8")
+        )
+        old_schema = yaml.safe_load(
+            (source_configs / "config_schema.yaml").read_text(encoding="utf-8")
+        )
+        old_registry = yaml.safe_load(
+            (source_configs / "config_retirements.yaml").read_text(encoding="utf-8")
+        )
+        old_default["FramePreprocessor"]["PREPROCESSING_COLOR_SPACE"] = "BGR"
+        old_schema["sections"]["FramePreprocessor"]["parameters"][
+            "PREPROCESSING_COLOR_SPACE"
+        ] = {
+            "type": "string",
+            "default": "BGR",
+            "description": "Legacy color-space setting",
+            "reload_tier": "tracker_restart",
+            "reboot_required": False,
+            "options": [
+                {"value": "BGR", "label": "BGR"},
+                {"value": "GRAY", "label": "GRAY"},
+            ],
+        }
+        old_registry["retirements"] = [
+            entry
+            for entry in old_registry["retirements"]
+            if entry["path"]
+            != ["FramePreprocessor", "PREPROCESSING_COLOR_SPACE"]
+        ]
+        (configs / "config_default.yaml").write_text(
+            yaml.safe_dump(old_default, sort_keys=False),
+            encoding="utf-8",
+        )
+        (configs / "config_schema.yaml").write_text(
+            yaml.safe_dump(old_schema, sort_keys=False),
+            encoding="utf-8",
+        )
+        (configs / "config_retirements.yaml").write_text(
+            yaml.safe_dump(old_registry, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        service = ConfigService(project_root=tmp_path)
+
+        # Simulate the checkout files being replaced by the current release
+        # while the old process remains alive.
+        for filename in (
+            "config_default.yaml",
+            "config_schema.yaml",
+            "config_retirements.yaml",
+        ):
+            shutil.copy2(source_configs / filename, configs / filename)
+
+        status = service.get_runtime_config_status()
+
+        assert status["source_generation"]["state"] == "changed"
+        assert status["source_generation"]["restart_required"] is True
+        assert "retirements" in status["source_generation"]["changed_sources"]
+        assert status["restart_required"] is True
+        assert status["pending_changes"] == []
+        loaded_registry = service.get_retirement_registry()
+        assert ("FramePreprocessor", "PREPROCESSING_COLOR_SPACE") not in {
+            tuple(entry["path"]) for entry in loaded_registry["retirements"]
+        }
 
 
 class TestConfigSyncUtilities:

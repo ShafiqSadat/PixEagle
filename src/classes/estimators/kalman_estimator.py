@@ -164,6 +164,57 @@ class KalmanEstimator(BaseEstimator):
     def is_initialized(self) -> bool:
         return self.initialized
 
+    def snapshot_state(self):
+        """Capture volatile filter state for detector-assisted re-seeding.
+
+        A recovery candidate replaces the OpenCV tracker, but it should not
+        erase the motion state accumulated before a short visual loss.  The
+        snapshot stays in memory for that one lifecycle transition only.
+        """
+        if not self.initialized:
+            return None
+        return {
+            "x": np.array(self.filter.x, dtype=float, copy=True),
+            "P": np.array(self.filter.P, dtype=float, copy=True),
+            "dt": float(self.dt),
+            "prediction_age_seconds": float(self.prediction_age_seconds),
+            "initialized": True,
+        }
+
+    def restore_state(self, snapshot) -> bool:
+        """Restore a validated in-memory snapshot without trusting its input."""
+        if not isinstance(snapshot, dict) or snapshot.get("initialized") is not True:
+            return False
+        try:
+            state = np.asarray(snapshot["x"], dtype=float)
+            covariance = np.asarray(snapshot["P"], dtype=float)
+            dt = float(snapshot["dt"])
+            prediction_age = float(snapshot["prediction_age_seconds"])
+            if state.shape != (6, 1) or covariance.shape != (6, 6):
+                return False
+            if not (
+                np.all(np.isfinite(state))
+                and np.all(np.isfinite(covariance))
+                and np.isfinite(dt)
+                and np.isfinite(prediction_age)
+            ):
+                return False
+            if prediction_age < 0.0:
+                return False
+
+            self.filter.x = np.array(state, copy=True)
+            self.filter.P = np.array(covariance, copy=True)
+            self.initialized = True
+            self.prediction_age_seconds = min(
+                prediction_age,
+                self.max_prediction_seconds,
+            )
+            self.set_dt(dt)
+            return True
+        except (KeyError, TypeError, ValueError, OverflowError):
+            logger.warning("Rejected invalid Kalman continuity snapshot")
+            return False
+
     def predict_only(self) -> bool:
         """
         Performs only the predict step of the Kalman Filter without an update.
