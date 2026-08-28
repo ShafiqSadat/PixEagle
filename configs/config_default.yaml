@@ -1665,23 +1665,21 @@ Estimator:
 # FRAME PREPROCESSING
 # ==============================================================================
 FramePreprocessor:
-  # 🎨 Image enhancement for better tracking
-  ENABLE_PREPROCESSING: true
+  # Optional image enhancement. Raw BGR is the efficient, interoperable
+  # baseline for cameras, replay, classic trackers, and AI detectors.
+  ENABLE_PREPROCESSING: false
   
   # === Blur (noise reduction) ===
-  PREPROCESSING_USE_BLUR: true
+  PREPROCESSING_USE_BLUR: false
   PREPROCESSING_BLUR_KERNEL_SIZE: 5         # Must be odd (3, 5, 7...)
   PREPROCESSING_USE_MEDIAN_BLUR: false
   PREPROCESSING_MEDIAN_BLUR_KERNEL_SIZE: 5
   
   # === Contrast Enhancement ===
-  PREPROCESSING_USE_CLAHE: true             # Adaptive histogram equalization
+  PREPROCESSING_USE_CLAHE: false            # Adaptive histogram equalization
   PREPROCESSING_CLAHE_CLIP_LIMIT: 2.0       # Contrast limit
-  PREPROCESSING_CLAHE_TILE_GRID_SIZE: 8     # Grid size (1-10)
+  PREPROCESSING_CLAHE_TILE_GRID_SIZE: 8     # Grid size (1-32)
   
-  # === Color Space ===
-  PREPROCESSING_COLOR_SPACE: BGR            # Options: BGR, GRAY, HSV, LAB
-
 # ==============================================================================
 # SEGMENTATION
 # ==============================================================================

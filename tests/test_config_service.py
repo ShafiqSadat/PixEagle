@@ -1072,6 +1072,7 @@ class TestRuntimeConfigStatus:
             "yolov11n.pt"
         )
         runtime_config["GStreamer"]["GSTREAMER_CONTRAST"] = 1.0
+        runtime_config["FramePreprocessor"]["PREPROCESSING_COLOR_SPACE"] = "GRAY"
         with open(configs / "config.yaml", "w", encoding="utf-8") as target:
             yaml.safe_dump(runtime_config, target, sort_keys=False)
 
@@ -1081,6 +1082,7 @@ class TestRuntimeConfigStatus:
 
         assert startup["Segmentation"]["DEFAULT_SEGMENTATION_ALGORITHM"] == "disabled"
         assert "GSTREAMER_CONTRAST" not in startup["GStreamer"]
+        assert "PREPROCESSING_COLOR_SPACE" not in startup["FramePreprocessor"]
         assert status["restart_required"] is False
         assert status["pending_changes"] == []
 
@@ -1140,6 +1142,7 @@ class TestConfigSyncUtilities:
             ('Detector', 'ORB_NFEATURES'),
             ('Detector', 'ORB_MIN_MATCH_COUNT'),
             ('Detector', 'RANSAC_REPROJECTION_THRESHOLD'),
+            ('FramePreprocessor', 'PREPROCESSING_COLOR_SPACE'),
         }.issubset(paths)
         assert all(
             entry['replacement'] is None or isinstance(entry['replacement'], list)

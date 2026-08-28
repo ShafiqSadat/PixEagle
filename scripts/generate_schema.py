@@ -857,6 +857,37 @@ SCHEMA_OVERRIDES = {
         'type': 'integer', 'default': 5, 'min': 0, 'max': 20,
         'description': 'Number of rotated security audit JSONL files to retain locally',
     },
+    'FramePreprocessor.ENABLE_PREPROCESSING': {
+        'description': (
+            'Opt-in image enhancement; disabled keeps the shared capture frame '
+            'on the low-CPU BGR baseline'
+        ),
+    },
+    'FramePreprocessor.PREPROCESSING_USE_BLUR': {
+        'description': 'Apply Gaussian filtering for a measured sensor-noise problem',
+    },
+    'FramePreprocessor.PREPROCESSING_USE_MEDIAN_BLUR': {
+        'description': 'Apply median filtering for a measured salt-and-pepper noise problem',
+    },
+    'FramePreprocessor.PREPROCESSING_BLUR_KERNEL_SIZE': {
+        'min': 3, 'max': 99, 'step': 2,
+        'description': 'Odd Gaussian kernel size; larger values cost more and remove more texture',
+    },
+    'FramePreprocessor.PREPROCESSING_MEDIAN_BLUR_KERNEL_SIZE': {
+        'min': 3, 'max': 99, 'step': 2,
+        'description': 'Odd median kernel size; larger values cost more and remove more texture',
+    },
+    'FramePreprocessor.PREPROCESSING_USE_CLAHE': {
+        'description': 'Apply luminance-only CLAHE for a measured low-contrast scene',
+    },
+    'FramePreprocessor.PREPROCESSING_CLAHE_CLIP_LIMIT': {
+        'min': 0.1, 'max': 40.0, 'step': 0.1,
+        'description': 'CLAHE contrast limit; higher values can amplify noise',
+    },
+    'FramePreprocessor.PREPROCESSING_CLAHE_TILE_GRID_SIZE': {
+        'min': 1, 'max': 32,
+        'description': 'Positive CLAHE tile-grid dimension',
+    },
     'VideoSource.FRAME_ROTATION_DEG': {
         'options': [
             {'value': 0, 'label': '0\u00b0'},

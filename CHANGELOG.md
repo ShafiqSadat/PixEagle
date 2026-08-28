@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Make shared image preprocessing opt-in for the portable CPU baseline. Cache
+  reusable CLAHE state, validate the BGR frame contract, reject invalid filter
+  settings clearly, and retire the global color-space conversion that could
+  break trackers, OSD, or media encoders. Document the measured Pi-class
+  capture/stream baseline and tuning boundary.
 - Keep overloaded local-video demos near wall-clock time by dropping only
   overdue OpenCV replay frames in `REALTIME` mode. Deterministic replay and
   maximum-throughput modes continue to preserve capture order.

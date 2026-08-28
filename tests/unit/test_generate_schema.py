@@ -398,6 +398,26 @@ def test_checked_in_runtime_rate_schema_matches_defaults():
     assert mavlink_stale_schema["max"] == 5.0
 
 
+def test_frame_preprocessor_schema_matches_its_bgr_contract():
+    """Preprocessing controls expose only valid, bounded enhancement settings."""
+    config_default = yaml.safe_load(
+        (CONFIGS_DIR / "config_default.yaml").read_text(encoding="utf-8")
+    )
+    config_schema = yaml.safe_load(
+        (CONFIGS_DIR / "config_schema.yaml").read_text(encoding="utf-8")
+    )
+    defaults = config_default["FramePreprocessor"]
+    parameters = config_schema["sections"]["FramePreprocessor"]["parameters"]
+
+    assert defaults["ENABLE_PREPROCESSING"] is False
+    assert parameters["ENABLE_PREPROCESSING"]["default"] is False
+    assert parameters["PREPROCESSING_BLUR_KERNEL_SIZE"]["min"] == 3
+    assert parameters["PREPROCESSING_BLUR_KERNEL_SIZE"]["step"] == 2
+    assert parameters["PREPROCESSING_CLAHE_CLIP_LIMIT"]["min"] == 0.1
+    assert parameters["PREPROCESSING_CLAHE_TILE_GRID_SIZE"]["min"] == 1
+    assert "PREPROCESSING_COLOR_SPACE" not in parameters
+
+
 def test_checked_in_operator_ui_confirmation_contract_is_fail_safe():
     config_default = yaml.safe_load(
         (CONFIGS_DIR / "config_default.yaml").read_text(encoding="utf-8")

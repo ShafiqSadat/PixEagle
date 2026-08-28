@@ -6848,76 +6848,63 @@ sections:
     parameters:
       ENABLE_PREPROCESSING:
         type: boolean
-        default: true
-        description: === Blur (noise reduction) ===
+        default: false
+        description: Opt-in image enhancement; disabled keeps the shared capture frame on the low-CPU BGR baseline
         reload_tier: tracker_restart
         reboot_required: false
       PREPROCESSING_USE_BLUR:
         type: boolean
-        default: true
-        description: PREPROCESSING_USE_BLUR parameter
+        default: false
+        description: Apply Gaussian filtering for a measured sensor-noise problem
         reload_tier: tracker_restart
         reboot_required: false
       PREPROCESSING_BLUR_KERNEL_SIZE:
         type: integer
         default: 5
-        description: Must be odd (3, 5, 7...)
+        description: Odd Gaussian kernel size; larger values cost more and remove more texture
         reload_tier: tracker_restart
         reboot_required: false
-        min: 0
-        max: 100
+        min: 3
+        max: 99
+        step: 2
       PREPROCESSING_USE_MEDIAN_BLUR:
         type: boolean
         default: false
-        description: PREPROCESSING_USE_MEDIAN_BLUR parameter
+        description: Apply median filtering for a measured salt-and-pepper noise problem
         reload_tier: tracker_restart
         reboot_required: false
       PREPROCESSING_MEDIAN_BLUR_KERNEL_SIZE:
         type: integer
         default: 5
-        description: === Contrast Enhancement ===
+        description: Odd median kernel size; larger values cost more and remove more texture
         reload_tier: tracker_restart
         reboot_required: false
-        min: 0
-        max: 100
+        min: 3
+        max: 99
+        step: 2
       PREPROCESSING_USE_CLAHE:
         type: boolean
-        default: true
-        description: Adaptive histogram equalization
+        default: false
+        description: Apply luminance-only CLAHE for a measured low-contrast scene
         reload_tier: tracker_restart
         reboot_required: false
       PREPROCESSING_CLAHE_CLIP_LIMIT:
         type: float
         default: 2.0
-        description: Contrast limit
+        description: CLAHE contrast limit; higher values can amplify noise
         reload_tier: tracker_restart
         reboot_required: false
-        min: 0.0
-        max: 100.0
+        min: 0.1
+        max: 40.0
         step: 0.1
       PREPROCESSING_CLAHE_TILE_GRID_SIZE:
         type: integer
         default: 8
-        description: Grid size (1-10)
+        description: Positive CLAHE tile-grid dimension
         reload_tier: tracker_restart
         reboot_required: false
-        min: 0
-        max: 160
-      PREPROCESSING_COLOR_SPACE:
-        type: string
-        default: BGR
-        description: PREPROCESSING_COLOR_SPACE parameter
-        reload_tier: tracker_restart
-        reboot_required: false
-        options:
-        - value: BGR
-          label: BGR
-        - value: GRAY
-          label: GRAY
-        - value: HSV
-          label: HSV
-        - value: LAB
-          label: LAB
+        min: 1
+        max: 32
     additional_properties: false
   Segmentation:
     display_name: Selection Assist

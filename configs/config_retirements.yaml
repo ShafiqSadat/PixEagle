@@ -450,3 +450,10 @@ retirements:
     retired_in_schema_version: 1.6.0
     reason: The follower loop cadence is owned by Follower.General.CONTROL_UPDATE_RATE; this profile-local value was never consumed.
     replacement: [Follower, General, CONTROL_UPDATE_RATE]
+
+  - id: remove-unsupported-frame-preprocessor-color-space-v1
+    path: [FramePreprocessor, PREPROCESSING_COLOR_SPACE]
+    action: remove
+    retired_in_schema_version: 1.6.0
+    reason: The shared vision pipeline requires an 8-bit three-channel BGR frame; exposing a global color-space conversion could silently break trackers, OSD, and media encoders.
+    replacement: null

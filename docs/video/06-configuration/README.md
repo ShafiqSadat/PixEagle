@@ -50,6 +50,18 @@ GStreamer:
 
 See [Streaming Config](streaming-config.md) for details.
 
+### Frame Preprocessor
+
+Image enhancement is optional and disabled by default for a predictable,
+low-CPU baseline. The shared pipeline always remains an 8-bit, three-channel
+BGR image. Enable blur or CLAHE only for a measured camera-specific need and
+retest tracker cadence and accuracy after changing it. See the [streaming
+performance guide](../04-streaming/streaming-optimizer.md#capture-and-preprocessing)
+for the processing order and baseline. Config Sync removes only explicitly
+registered obsolete keys (with a backup); an older
+`FramePreprocessor.PREPROCESSING_COLOR_SPACE` value is therefore ignored and
+reported rather than left as a second frame-format authority.
+
 ## Quick Reference
 
 ### Source Types
