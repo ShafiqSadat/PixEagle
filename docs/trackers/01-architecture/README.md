@@ -55,6 +55,8 @@ The `TrackerOutput` dataclass in `src/classes/tracker_output.py`:
 - **Backwards Compatibility**: `create_legacy_tracker_output()` helper
 - **Freshness Metadata**: `raw_data` and `metadata` identify whether data is
   command-usable, stale, cached-frame-derived, or prediction-only
+- **Continuity Contract**: `continuity_state` and `recovery_recommended`
+  separate transient measurement uncertainty from terminal detector recovery
 
 ---
 
@@ -150,6 +152,12 @@ recovery while follower-ineligible. PXE-0131 tracks the separate migration of
 Smart's frame-count recovery internals to monotonic elapsed-time behavior and
 representative aerial-video benchmarks. It must not be implemented as duplicate
 follower timeouts or copied tracker-specific conditions.
+
+For visual `BaseTracker` providers, the controller also honors the output's
+shared continuity contract: the first rejected measurement still blocks
+commands, but detector recovery is delayed until the provider's configured
+failure tolerance reports `recovery_recommended`. Missing or malformed
+continuity metadata uses the conservative immediate-recovery path.
 
 ---
 

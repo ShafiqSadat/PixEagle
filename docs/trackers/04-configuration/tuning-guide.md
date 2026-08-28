@@ -137,8 +137,10 @@ Use tracker telemetry and logs to identify the failing gate:
 | `scale_invalid` | zoom and target-size change | raise scale gate gradually |
 | `reacquisition_pending` | consecutive candidate stability | inspect candidate trajectory; do not remove consensus to hide drift |
 
-`failure_threshold` changes warning timing only. Every rejected measurement is
-immediately stale and unusable for following.
+`failure_threshold` controls when the shared application recovery path is
+eligible after consecutive rejected measurements. Every rejected measurement
+is immediately stale and unusable for following; the threshold never authorizes
+prediction-only commands.
 
 ## Parameter Groups
 

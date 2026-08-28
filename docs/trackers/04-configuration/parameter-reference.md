@@ -73,9 +73,11 @@ CSRT_Tracker:
 
 For CSRT, KCF, Sparse Flow, VitTrack, DaSiamRPN, and dlib,
 `failure_threshold` controls when repeated rejected
-measurements are reported as a confirmed loss. It is not a command-validity
-grace period: the first rejected measurement is immediately stale and unusable
-for following.
+measurements promote the provider to terminal loss and allow the shared
+detector-recovery window to begin. It is not a command-validity grace period:
+the first rejected measurement is immediately stale and unusable for following.
+During the interval before the threshold, the tracker remains visible as
+`uncertain` and may recover naturally without a detector retry storm.
 
 ---
 

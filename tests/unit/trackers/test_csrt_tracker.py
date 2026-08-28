@@ -565,6 +565,30 @@ class TestCSRTUpdate:
         assert tracker.failure_count >= initial_failures
 
     @patch('classes.trackers.csrt_tracker.cv2')
+    def test_failed_update_publishes_shared_continuity_state(self, mock_cv2, mock_dependencies):
+        """CSRT transient failures remain unsafe but do not trigger early recovery."""
+        mock_cv2.TrackerCSRT_Params.return_value = MagicMock()
+        mock_csrt = MockCSRTTracker(success_rate=0.0)
+        mock_cv2.TrackerCSRT_create.return_value = mock_csrt
+        mock_cv2.__version__ = "4.13.0-test"
+
+        from classes.trackers.csrt_tracker import CSRTTracker
+        video_handler, detector, app_controller = mock_dependencies
+        tracker = CSRTTracker(video_handler, detector, app_controller)
+        tracker.start_tracking(create_mock_test_frame(), create_mock_bbox())
+
+        tracker.update(create_mock_test_frame())
+        output = tracker.get_output()
+
+        assert output.raw_data["continuity_state"] == "uncertain"
+        assert output.raw_data["recovery_recommended"] is False
+
+        tracker.failure_count = tracker.failure_threshold
+        terminal_output = tracker.get_output()
+        assert terminal_output.raw_data["continuity_state"] == "lost"
+        assert terminal_output.raw_data["recovery_recommended"] is True
+
+    @patch('classes.trackers.csrt_tracker.cv2')
     def test_update_normalizes_bbox(self, mock_cv2, mock_dependencies):
         """update should normalize bbox."""
         mock_cv2.TrackerCSRT_Params.return_value = MagicMock()

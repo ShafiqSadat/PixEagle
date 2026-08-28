@@ -93,6 +93,7 @@ class ConcreteTracker:
 
         # Bind Phase 3 methods needed by get_output/reset
         for name in ['_build_output', '_get_velocity_from_estimator',
+                      'get_tracking_continuity',
                       'compute_motion_confidence', '_build_failure_info',
                       '_record_loss_start', '_check_out_of_frame',
                       '_update_out_of_frame_status', '_smooth_confidence',
@@ -672,6 +673,66 @@ class TestGetOutput:
         assert output.raw_data["data_is_stale"] is True
         assert output.metadata["usable_for_following"] is False
 
+    def test_get_output_distinguishes_transient_uncertainty_from_terminal_loss(self):
+        """A failed measurement stays unsafe without forcing immediate recovery."""
+        tracker = create_test_tracker()
+        tracker.tracking_started = True
+        tracker.normalized_center = (0.0, 0.0)
+        tracker.failure_threshold = 5
+        tracker.failure_count = 1
+
+        from classes.trackers.base_tracker import BaseTracker
+        output = BaseTracker.get_output(tracker)
+
+        assert output.raw_data["continuity_state"] == "uncertain"
+        assert output.raw_data["recovery_recommended"] is False
+        assert output.raw_data["failure_count"] == 1
+        assert output.raw_data["failure_threshold"] == 5
+        assert output.metadata["continuity_state"] == "uncertain"
+        assert output.raw_data["usable_for_following"] is False
+
+        tracker.failure_count = 5
+        terminal_output = BaseTracker.get_output(tracker)
+
+        assert terminal_output.raw_data["continuity_state"] == "lost"
+        assert terminal_output.raw_data["recovery_recommended"] is True
+
+    def test_invalid_failure_threshold_requests_conservative_recovery(self):
+        """Malformed provider thresholds cannot suppress detector recovery."""
+        tracker = create_test_tracker()
+        tracker.tracking_started = True
+        tracker.normalized_center = (0.0, 0.0)
+        tracker.failure_count = 1
+        tracker.failure_threshold = "invalid"
+
+        from classes.trackers.base_tracker import BaseTracker
+        output = BaseTracker.get_output(tracker)
+
+        assert output.raw_data["failure_threshold"] == 1
+        assert output.raw_data["recovery_recommended"] is True
+
+    def test_invalid_failure_count_requests_conservative_recovery(self):
+        """Malformed provider counters cannot masquerade as a measured frame."""
+        tracker = create_test_tracker()
+        tracker.tracking_started = True
+        tracker.normalized_center = (0.0, 0.0)
+        tracker.failure_count = "invalid"
+        tracker.failure_threshold = 5
+
+        from classes.trackers.base_tracker import BaseTracker
+        output = BaseTracker.get_output(tracker)
+
+        assert output.raw_data["failure_count"] == 1
+        assert output.raw_data["failure_threshold"] == 1
+        assert output.raw_data["continuity_state"] == "lost"
+        assert output.raw_data["recovery_recommended"] is True
+
+        tracker.failure_count = -1
+        negative_output = BaseTracker.get_output(tracker)
+
+        assert negative_output.raw_data["failure_count"] == 1
+        assert negative_output.raw_data["recovery_recommended"] is True
+
 
 @pytest.mark.unit
 class TestGetCapabilities:
@@ -950,7 +1011,8 @@ def create_phase3_tracker(width=640, height=480):
     phase3_methods = [
         '_build_failure_info', '_record_loss_start', '_check_out_of_frame',
         '_update_out_of_frame_status', '_smooth_confidence', '_log_performance',
-        '_get_velocity_from_estimator', '_build_output', 'compute_motion_confidence',
+        '_get_velocity_from_estimator', '_build_output',
+        'get_tracking_continuity', 'compute_motion_confidence',
     ]
     for name in phase3_methods:
         method = getattr(BaseTracker, name)

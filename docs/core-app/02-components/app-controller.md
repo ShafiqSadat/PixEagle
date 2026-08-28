@@ -218,6 +218,9 @@ tracker_output = self.tracker.update(frame)
 # - tracking_active: bool
 # - raw_data / metadata freshness fields:
 #   usable_for_following, data_is_stale, freshness_reason
+# - BaseTracker continuity fields:
+#   continuity_state, failure_count, failure_threshold,
+#   recovery_recommended
 ```
 
 ### With Follower
@@ -238,6 +241,12 @@ if tracker_output.tracking_active or self._should_route_inactive_output_to_follo
 External trackers bypass video-frame freshness only when their explicit
 capabilities declare `requires_video: false`. External trackers without that
 capability are treated as vision-dependent by default.
+
+For classic visual trackers, AppController keeps the command-freshness and
+continuity decisions separate. A rejected measurement is immediately blocked
+from follower commands. The provider's `recovery_recommended` contract controls
+when the bounded detector-recovery window starts; absent or malformed metadata
+uses immediate recovery for compatibility and safety.
 
 ### Validation Injection Hook
 

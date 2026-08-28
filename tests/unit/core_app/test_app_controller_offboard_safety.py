@@ -562,6 +562,50 @@ async def test_update_loop_first_classic_tracker_failure_dispatches_unusable_out
 
 
 @pytest.mark.asyncio
+async def test_update_loop_transient_classic_failure_waits_for_tracker_tolerance():
+    """Transient visual uncertainty must not launch detector recovery early."""
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    ctrl = _minimal_update_loop_controller(frame)
+    uncertain_output = _active_position_output(
+        usable_for_following=False,
+        data_is_stale=True,
+        prediction_only=True,
+        freshness_reason="prediction_only",
+        recovery_recommended=False,
+        continuity_state="uncertain",
+    )
+    ctrl.tracker = SimpleNamespace(
+        is_external_tracker=False,
+        update=MagicMock(return_value=(False, None)),
+        get_output=MagicMock(return_value=uncertain_output),
+        update_estimator_without_measurement=MagicMock(),
+        draw_tracking=MagicMock(side_effect=lambda display, **_kwargs: display),
+        draw_estimate=MagicMock(side_effect=lambda display, **_kwargs: display),
+        position_estimator=None,
+    )
+    ctrl._dispatch_unusable_tracker_output = AsyncMock(return_value=True)
+    ctrl.check_failsafe = AsyncMock()
+    ctrl.handle_tracking_failure = MagicMock()
+
+    with patch('classes.app_controller.Parameters.ENABLE_PREPROCESSING', False), \
+            patch('classes.app_controller.Parameters.ENABLE_DEBUGGING', False), \
+            patch('classes.app_controller.Parameters.STREAM_PROCESSED_OSD', False), \
+            patch('classes.app_controller.Parameters.ENABLE_GSTREAMER_STREAM', False):
+        await ctrl.update_loop(frame)
+
+    assert ctrl.tracking_failure_start_time is None
+    ctrl.handle_tracking_failure.assert_not_called()
+    ctrl.tracker.update_estimator_without_measurement.assert_called_once_with()
+    ctrl.tracker.draw_tracking.assert_called_once()
+    ctrl.tracker.draw_estimate.assert_called_once()
+    ctrl._dispatch_unusable_tracker_output.assert_awaited_once_with(
+        reason="classic_tracker_measurement_uncertain",
+        frame_status=None,
+    )
+    ctrl.check_failsafe.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_failed_redetection_result_does_not_reset_original_loss_deadline():
     """A non-empty {success:false} result must not recreate an endless recovery loop."""
     frame = np.zeros((8, 8, 3), dtype=np.uint8)

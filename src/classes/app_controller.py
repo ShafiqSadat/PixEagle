@@ -1514,10 +1514,30 @@ class AppController:
                                 logging.debug(f"TEMPLATE: Updated (Conf: {tracker_confidence:.2f}, Frame: {self.frame_counter})")
 
                 else:
-                    frame = await self._handle_classic_tracking_loss(
-                        analysis_frame,
-                        display_frame=frame,
+                    recovery_recommended = (
+                        self._classic_tracker_recovery_is_recommended(
+                            tracker_output
+                        )
                     )
+                    # A tracker can be command-unsafe for a transient frame
+                    # without having exhausted its own continuity tolerance.
+                    # Once controller-owned recovery has started, keep its
+                    # immutable deadline in force until a fresh measurement or
+                    # terminal timeout, even if a provider reports uncertainty.
+                    if (
+                        recovery_recommended
+                        or getattr(self, "tracking_failure_start_time", None)
+                        is not None
+                    ):
+                        frame = await self._handle_classic_tracking_loss(
+                            analysis_frame,
+                            display_frame=frame,
+                        )
+                    else:
+                        frame = await self._handle_classic_tracking_uncertainty(
+                            analysis_frame,
+                            display_frame=frame,
+                        )
 
 
             _t_track = time.monotonic()
@@ -1677,6 +1697,50 @@ class AppController:
         freshness = evaluate_tracker_command_freshness(tracker_output)
         return bool(freshness["usable_for_following"])
 
+    def _classic_tracker_recovery_is_recommended(
+        self,
+        tracker_output: Optional[TrackerOutput] = None,
+    ) -> bool:
+        """Read the shared tracker continuity contract conservatively.
+
+        Tracker implementations still own their failure tolerance. Missing or
+        malformed continuity metadata falls back to immediate recovery so
+        legacy/custom adapters cannot accidentally suppress the bounded loss
+        path.
+        """
+        if not isinstance(tracker_output, TrackerOutput):
+            output_getter = getattr(self.tracker, "get_output", None)
+            if not callable(output_getter):
+                return True
+            try:
+                tracker_output = output_getter()
+            except Exception as exc:
+                logging.error(
+                    "Could not read classic tracker continuity contract: %s",
+                    exc,
+                )
+                return True
+
+        if not isinstance(tracker_output, TrackerOutput):
+            return True
+
+        for container in (
+            getattr(tracker_output, "raw_data", None),
+            getattr(tracker_output, "metadata", None),
+        ):
+            if not isinstance(container, dict) or "recovery_recommended" not in container:
+                continue
+            value = container["recovery_recommended"]
+            if isinstance(value, bool):
+                return value
+            logging.warning(
+                "Ignoring malformed classic tracker recovery contract: %r",
+                value,
+            )
+            return True
+
+        return True
+
     @staticmethod
     def _classic_tracking_recovery_policy() -> Tuple[float, int]:
         """Return bounded recovery timeout and attempt count from canonical config."""
@@ -1797,6 +1861,63 @@ class AppController:
                     attempt,
                     max_attempts,
                 )
+
+        return frame
+
+    async def _handle_classic_tracking_uncertainty(
+        self,
+        analysis_frame: Optional[np.ndarray],
+        *,
+        display_frame: Optional[np.ndarray] = None,
+        frame_status: Optional[Dict[str, Any]] = None,
+    ) -> Optional[np.ndarray]:
+        """Keep a transient visual loss alive without starting re-detection.
+
+        The last confirmed geometry is display-only and follower commands are
+        still invalidated for this frame. The underlying tracker continues to
+        receive every frame and can recover naturally before its configured
+        failure threshold promotes the session to detector-assisted recovery.
+        """
+        frame = analysis_frame if display_frame is None else display_frame
+        expected_generation = int(
+            getattr(self, "_tracking_session_generation", 0)
+        )
+        if not self._tracking_session_is_current(expected_generation):
+            return frame
+
+        self.frame_counter = 0
+
+        estimator_update = getattr(
+            self.tracker, "update_estimator_without_measurement", None
+        )
+        if callable(estimator_update):
+            estimator_update()
+
+        # Keep the last confirmed box visible as an uncertainty indication. It
+        # is never passed to the follower as a fresh measurement.
+        tracker_drawer = getattr(self.tracker, "draw_tracking", None)
+        if frame is not None and callable(tracker_drawer):
+            try:
+                frame = tracker_drawer(frame, tracking_successful=False)
+            except Exception as exc:
+                logging.debug(
+                    "Could not draw transient classic tracker uncertainty: %s",
+                    exc,
+                )
+
+        estimate_drawer = getattr(self.tracker, "draw_estimate", None)
+        if frame is not None and callable(estimate_drawer):
+            frame = estimate_drawer(frame, tracking_successful=False)
+
+        if self.following_active:
+            await self._dispatch_unusable_tracker_output(
+                reason="classic_tracker_measurement_uncertain",
+                frame_status=frame_status,
+            )
+            await self.check_failsafe()
+
+        if not self._tracking_session_is_current(expected_generation):
+            return frame
 
         return frame
 

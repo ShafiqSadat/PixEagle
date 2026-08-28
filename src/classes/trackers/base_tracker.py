@@ -1031,17 +1031,80 @@ class BaseTracker(ABC):
                     return (vel_x, vel_y)
         return None
 
+    def get_tracking_continuity(self) -> Dict[str, Any]:
+        """Return the shared visual-tracker continuity contract.
+
+        A rejected measurement is unsafe for follower commands immediately,
+        but one rejected frame is not necessarily a terminal target loss. The
+        tracker-owned failure threshold determines when the application should
+        spend its detector recovery budget. Keeping those decisions in the
+        common base contract lets every visual tracker use the same lifecycle
+        without weakening the command-freshness boundary.
+
+        Custom trackers may override this method when their failure counter has
+        different semantics, but they must preserve the returned field names
+        and boolean ``recovery_recommended`` contract.
+        """
+        failure_count = getattr(self, "failure_count", 0)
+        counter_valid = True
+        try:
+            if isinstance(failure_count, bool):
+                raise ValueError
+            failure_count = int(failure_count)
+            if failure_count < 0:
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            # A provider that cannot report its continuity counter must not
+            # accidentally suppress the bounded recovery path.
+            failure_count = 1
+            counter_valid = False
+
+        failure_threshold = getattr(self, "failure_threshold", 1)
+        try:
+            if isinstance(failure_threshold, bool):
+                raise ValueError
+            failure_threshold = max(1, int(failure_threshold))
+        except (TypeError, ValueError, OverflowError):
+            # An invalid threshold must not keep a failed tracker alive
+            # indefinitely; the conservative fallback requests recovery now.
+            failure_threshold = 1
+        if not counter_valid:
+            failure_threshold = 1
+
+        tracking_started = bool(getattr(self, "tracking_started", False))
+        if not tracking_started:
+            continuity_state = "inactive"
+            recovery_recommended = False
+        elif failure_count == 0:
+            continuity_state = "measured"
+            recovery_recommended = False
+        elif failure_count < failure_threshold:
+            continuity_state = "uncertain"
+            recovery_recommended = False
+        else:
+            continuity_state = "lost"
+            recovery_recommended = True
+
+        return {
+            "continuity_state": continuity_state,
+            "recovery_recommended": recovery_recommended,
+            "failure_count": failure_count,
+            "failure_threshold": failure_threshold,
+        }
+
     def _build_output(self, tracker_algorithm: str,
                       extra_quality: Optional[Dict] = None,
                       extra_raw: Optional[Dict] = None,
                       extra_metadata: Optional[Dict] = None) -> TrackerOutput:
         """Build standardized TrackerOutput. Subclasses pass extras."""
+        continuity = self.get_tracking_continuity()
+        failure_count = continuity["failure_count"]
         velocity = self._get_velocity_from_estimator()
         self.confidence = self._normalize_confidence(self.confidence)
         data_type = (TrackerDataType.VELOCITY_AWARE if velocity else
                      TrackerDataType.BBOX_CONFIDENCE if self.bbox else
                      TrackerDataType.POSITION_2D)
-        prediction_only = self.failure_count > 0
+        prediction_only = failure_count > 0
         measurement_source = "prediction_only" if prediction_only else "measurement"
         usable_for_following = bool(self.tracking_started and not prediction_only)
         predicted_bbox = getattr(self, "predicted_bbox", None)
@@ -1058,7 +1121,7 @@ class BaseTracker(ABC):
 
         quality_metrics = {
             'motion_consistency': self.compute_motion_confidence() if self.prev_center else 1.0,
-            'failure_count': self.failure_count,
+            'failure_count': failure_count,
             'success_rate': (self.successful_frames / (self.frame_count + 1e-6)
                              if self.frame_count > 0 else 1.0),
             'data_is_stale': prediction_only,
@@ -1084,6 +1147,9 @@ class BaseTracker(ABC):
         }
         if extra_raw:
             raw_data.update(extra_raw)
+        # The base contract remains authoritative even when a provider adds
+        # diagnostic fields with overlapping names.
+        raw_data.update(continuity)
 
         metadata = {
             'tracker_class': self.__class__.__name__,
@@ -1100,6 +1166,7 @@ class BaseTracker(ABC):
         }
         if extra_metadata:
             metadata.update(extra_metadata)
+        metadata.update(continuity)
 
         return TrackerOutput(
             data_type=data_type,

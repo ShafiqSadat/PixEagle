@@ -341,6 +341,8 @@ class TestMyTracker:
 - [ ] Use `self._log_performance(start_time)` for diagnostics
 - [ ] Use `self._build_output('MyAlgorithm')` in `get_output()`
 - [ ] Use `self._record_loss_start()` and `self._build_failure_info()` on failure
+- [ ] Keep `failure_count` consecutive and rely on inherited
+      `get_tracking_continuity()` for recovery promotion
 - [ ] Call `super().reset()` in `reset()` instead of manual clearing
 - [ ] Handle failure cases with structured `TrackingFailureInfo`
 - [ ] Add to TrackerFactory registry

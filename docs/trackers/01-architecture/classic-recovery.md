@@ -24,7 +24,30 @@ The recovery contract separates five responsibilities:
    candidate, and waits for a fresh measured update.
 
 Neither an estimator prediction nor a detector candidate can authorize follower
-commands. Loss is fail-closed from the first rejected tracker update.
+commands. Command eligibility is fail-closed from the first rejected tracker
+update. A visual tracker may still report bounded `uncertain` continuity while
+its configured consecutive-failure tolerance has not been exhausted; the
+shared detector-recovery window starts only when its output reports
+`recovery_recommended: true`. This keeps transient tracker noise from causing a
+recovery storm without allowing stale data to reach the follower.
+
+## Continuity Contract
+
+Every standard visual output built by `BaseTracker` includes the same
+diagnostic fields in `raw_data` and `metadata`:
+
+- `continuity_state`: `inactive`, `measured`, `uncertain`, or `lost`;
+- `failure_count` and `failure_threshold`: the provider's consecutive-failure
+  counters and configured promotion threshold;
+- `recovery_recommended`: whether the application should enter its bounded
+  detector-recovery path.
+
+`usable_for_following` remains false for every state except a fresh measured
+output. The last confirmed box and estimator prediction can be drawn for
+operator context during `uncertain` state, but they are display/recovery data
+only. A custom tracker that does not publish this contract is handled
+conservatively and enters recovery immediately, preserving compatibility with
+older adapters.
 
 ## Search Policy
 
@@ -107,8 +130,11 @@ report recovery rate, recovery latency, and wrong-object locks together.
 ## Extension Contract
 
 A new classic tracker normally needs only `BaseTracker`'s inherited
-`get_recovery_hint()`. A tracker with an internal estimator, such as KCF, should
-override `is_recovery_prediction_reliable()` using its own covariance contract.
+`get_recovery_hint()` and `get_tracking_continuity()` contract. A tracker with
+an internal estimator, such as KCF, should override
+`is_recovery_prediction_reliable()` using its own covariance contract. It must
+increment/reset `failure_count` consistently for consecutive measurements; the
+base output then supplies the shared recovery decision.
 
 A new detector may override:
 

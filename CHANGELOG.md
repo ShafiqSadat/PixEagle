@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Separate visual-tracker command freshness from continuity recovery. A
+  rejected frame remains immediately ineligible for follower commands, while
+  CSRT, KCF, SparseFlow, VitTrack, DaSiamRPN, dlib, and future `BaseTracker`
+  providers can use their configured failure tolerance before the shared
+  detector-recovery window starts. Transient uncertainty remains visible in
+  the operator overlay and recovery stays bounded and fail-closed.
 - Make shared image preprocessing opt-in for the portable CPU baseline. Cache
   reusable CLAHE state, validate the BGR frame contract, reject invalid filter
   settings clearly, and retire the global color-space conversion that could
