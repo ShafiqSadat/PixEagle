@@ -1530,6 +1530,15 @@ sections:
         min: 0.0
         max: 1.0
         step: 0.01
+      min_appearance_confidence:
+        type: float
+        default: 0.25
+        description: Reject clear short-term appearance mismatches
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
       use_color_names:
         type: boolean
         default: true
@@ -1735,6 +1744,15 @@ sections:
         min: 0.0
         max: 1.0
         step: 0.01
+      min_appearance_confidence:
+        type: float
+        default: 0.25
+        description: Reject clear short-term appearance mismatches
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
       appearance_update_min_confidence:
         type: float
         default: 0.6
@@ -1903,6 +1921,15 @@ sections:
         description: Native distractor model is authoritative
         reload_tier: tracker_restart
         reboot_required: false
+      min_appearance_confidence:
+        type: float
+        default: 0.25
+        description: Used only when shared validation is enabled
+        reload_tier: tracker_restart
+        reboot_required: false
+        min: 0.0
+        max: 1.0
+        step: 0.01
       confidence_threshold:
         type: float
         default: 0.35
@@ -6544,7 +6571,7 @@ sections:
       APPEARANCE_CONFIDENCE_THRESHOLD:
         type: float
         default: 0.7
-        description: Re-detection validation
+        description: Strict detector re-acquisition identity gate
         reload_tier: tracker_restart
         reboot_required: false
         min: 0.0

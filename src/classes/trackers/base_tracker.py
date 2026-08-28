@@ -1197,11 +1197,19 @@ class BaseTracker(ABC):
             continuity_state = "lost"
             recovery_recommended = True
 
+        failure_info = getattr(self, "last_failure_info", None)
+        failure_reason = (
+            getattr(failure_info, "loss_reason", None)
+            if failure_count > 0 and failure_info is not None
+            else None
+        )
+
         return {
             "continuity_state": continuity_state,
             "recovery_recommended": recovery_recommended,
             "failure_count": failure_count,
             "failure_threshold": failure_threshold,
+            "failure_reason": failure_reason,
         }
 
     def _build_output(self, tracker_algorithm: str,

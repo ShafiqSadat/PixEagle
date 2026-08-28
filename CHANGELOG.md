@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Separate the CSRT-family short-term appearance mismatch floor from the
+  stricter detector-reacquisition identity gate. Moderate scene transitions no
+  longer become false CSRT losses solely because they fall below the recovery
+  threshold, while clear mismatches remain rejected and every failure reports
+  its shared reason and configured floor.
 - Preserve shared Kalman motion state when detector recovery re-seeds a classic
   tracker, and render only the prediction committed for the current failed
   frame. Prediction and tentative recovery remain follower-ineligible until a

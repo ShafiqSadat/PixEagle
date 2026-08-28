@@ -15,7 +15,8 @@ or success rate.
 Each OpenCV update is treated as a candidate measurement:
 
 1. Geometry must be finite and have positive width and height.
-2. Confidence and, when available, appearance are checked.
+2. Combined confidence and a low short-term appearance mismatch floor are
+   checked.
 3. Robust mode also checks estimator-relative motion and frame-to-frame scale.
 4. After a rejected measurement, consecutive valid candidates must regain
    consensus before a new measurement is published.
@@ -59,6 +60,7 @@ CSRT_Tracker:
   max_scale_change_per_frame: 0.5
   max_motion_per_frame: 0.6
   appearance_learning_rate: 0.10
+  min_appearance_confidence: 0.25
 
   use_color_names: true
   use_hog: true
@@ -76,6 +78,13 @@ CSRT_Tracker:
 make rejected frames usable. Detector recovery is bounded separately by
 `Tracking.TRACKING_FAILURE_TIMEOUT` and `Tracking.REDETECTION_ATTEMPTS`.
 
+`min_appearance_confidence` rejects a clear mismatch in routine tracker
+continuity. It is intentionally lower than
+`Tracking.APPEARANCE_CONFIDENCE_THRESHOLD`, which is the stricter identity gate
+for detector-assisted reacquisition. Raising the continuity floor to the
+reacquisition value can reject valid lighting or background transitions before
+CSRT adapts.
+
 ## Diagnostics
 
 `TrackerOutput.raw_data` includes:
@@ -84,6 +93,8 @@ make rejected frames usable. Detector recovery is bounded separately by
 - `candidate_state`: `confirmed`, `tentative`, or `none`
 - `candidate_bbox`: private validation geometry for diagnostics
 - `validation_progress`: valid candidate count and required consensus
+- `failure_reason`: current rejected-measurement reason, or `null` while measured
+- quality metrics `appearance_confidence` and `appearance_floor`
 
 Tentative geometry is diagnostic only. Consumers must use the shared tracker
 freshness contract, not infer command eligibility from `candidate_bbox`.

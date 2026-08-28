@@ -683,6 +683,8 @@ class TestGetOutput:
         tracker.normalized_center = (0.0, 0.0)
         tracker.failure_threshold = 5
         tracker.failure_count = 1
+        tracker.bbox = (10, 20, 30, 40)
+        tracker._build_failure_info("appearance_mismatch")
 
         from classes.trackers.base_tracker import BaseTracker
         output = BaseTracker.get_output(tracker)
@@ -691,7 +693,9 @@ class TestGetOutput:
         assert output.raw_data["recovery_recommended"] is False
         assert output.raw_data["failure_count"] == 1
         assert output.raw_data["failure_threshold"] == 5
+        assert output.raw_data["failure_reason"] == "appearance_mismatch"
         assert output.metadata["continuity_state"] == "uncertain"
+        assert output.metadata["failure_reason"] == "appearance_mismatch"
         assert output.raw_data["usable_for_following"] is False
 
         tracker.failure_count = 5

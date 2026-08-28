@@ -416,6 +416,7 @@ CSRT_Tracker:
   max_motion_per_frame: 0.6              # Max motion as fraction of frame diagonal
 
   appearance_learning_rate: 0.10         # Adaptive learning speed (0.0-1.0)
+  min_appearance_confidence: 0.25         # Reject clear short-term appearance mismatches
 
   # OpenCV CSRT parameters. Revalidate changes on representative recordings.
   use_color_names: true                  # Enable ColorNames features
@@ -461,6 +462,7 @@ VitTrack_Tracker:
   max_scale_change_per_frame: 0.60        # Maximum accepted scale delta
   max_motion_per_frame: 0.60              # Maximum frame-diagonal motion fraction
   appearance_learning_rate: 0.05          # Accepted appearance-template update rate
+  min_appearance_confidence: 0.25         # Reject clear short-term appearance mismatches
   appearance_update_min_confidence: 0.60  # Withhold updates below this confidence
   enable_multiframe_validation: true      # Require consensus after a rejection
   validation_consensus_frames: 3          # Consecutive valid proposals to republish
@@ -494,6 +496,7 @@ DaSiamRPN_Tracker:
   native_score_threshold: 0.20            # Reject uncertain native proposals
   model_score_weight: 0.80                # Native score contribution
   use_shared_appearance_validation: false # Native distractor model is authoritative
+  min_appearance_confidence: 0.25         # Used only when shared validation is enabled
 
   confidence_threshold: 0.35
   failure_threshold: 5
@@ -1578,7 +1581,7 @@ Detector:
   TEMPLATE_MATCHING_SCALES: [0.5, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 2.0]
   TEMPLATE_MATCHING_THRESHOLD: 0.7          # Match confidence threshold
 
-  APPEARANCE_CONFIDENCE_THRESHOLD: 0.7      # Re-detection validation
+  APPEARANCE_CONFIDENCE_THRESHOLD: 0.7      # Strict detector re-acquisition identity gate
   TRACKER_CONFIDENCE_THRESHOLD_FOR_TEMPLATE_UPDATE: 0.8  # Minimum confidence for adaptive appearance updates
   
   # === Re-detection Parameters ===

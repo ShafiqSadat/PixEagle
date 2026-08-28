@@ -53,6 +53,7 @@ CSRT_Tracker:
   confidence_smoothing: 0.7
   max_scale_change_per_frame: 0.5
   max_motion_per_frame: 0.6
+  min_appearance_confidence: 0.25
 
   # OpenCV CSRT parameters
   use_color_names: true
@@ -78,6 +79,9 @@ detector-recovery window to begin. It is not a command-validity grace period:
 the first rejected measurement is immediately stale and unusable for following.
 During the interval before the threshold, the tracker remains visible as
 `uncertain` and may recover naturally without a detector retry storm.
+`min_appearance_confidence` is the low hard-mismatch floor used during normal
+CSRT-family continuity. `Tracking.APPEARANCE_CONFIDENCE_THRESHOLD` remains the
+stricter detector-reacquisition identity gate.
 
 ---
 
@@ -130,6 +134,7 @@ VitTrack_Tracker:
   max_scale_change_per_frame: 0.60
   max_motion_per_frame: 0.60
   appearance_learning_rate: 0.05
+  min_appearance_confidence: 0.25
   appearance_update_min_confidence: 0.60
   enable_multiframe_validation: true
   validation_consensus_frames: 3
@@ -154,6 +159,7 @@ DaSiamRPN_Tracker:
   native_score_threshold: 0.20
   model_score_weight: 0.80
   use_shared_appearance_validation: false
+  min_appearance_confidence: 0.25
   confidence_threshold: 0.35
   max_motion_per_frame: 0.65
   max_scale_change_per_frame: 0.65

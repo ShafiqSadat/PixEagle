@@ -36,16 +36,6 @@ class OpenCVNativeScoreTracker(CSRTTracker):
             fallback=0.65,
         )
 
-    @staticmethod
-    def _bounded_fraction(value, *, fallback: float) -> float:
-        try:
-            numeric = float(value)
-        except (TypeError, ValueError):
-            return fallback
-        if not np.isfinite(numeric) or not 0.0 <= numeric <= 1.0:
-            return fallback
-        return numeric
-
     def _read_native_score(self) -> float:
         try:
             score = self.tracker.getTrackingScore()

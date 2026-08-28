@@ -266,6 +266,7 @@ class TestCSRTPerformanceModes:
                 'max_scale_change_per_frame': 0.37,
                 'max_motion_per_frame': 0.22,
                 'appearance_learning_rate': 0.09,
+                'min_appearance_confidence': 0.28,
                 'appearance_update_min_confidence': 0.73,
                 'csrt_learning_rate': 0.031,
                 'number_of_scales': 27,
@@ -285,6 +286,7 @@ class TestCSRTPerformanceModes:
         assert tracker.max_scale_change == pytest.approx(0.37)
         assert tracker.motion_consistency_threshold == pytest.approx(0.22)
         assert tracker.appearance_learning_rate == pytest.approx(0.09)
+        assert tracker.min_appearance_confidence == pytest.approx(0.28)
         assert tracker.appearance_update_min_confidence == pytest.approx(0.73)
         assert params.filter_lr == pytest.approx(0.031)
         assert params.number_of_scales == 27
@@ -292,6 +294,30 @@ class TestCSRTPerformanceModes:
         assert params.use_color_names is False
         assert params.use_hog is True
         assert params.use_segmentation is False
+
+    @patch('classes.trackers.csrt_tracker.cv2')
+    def test_invalid_appearance_floor_uses_reviewed_fallback(
+        self, mock_cv2, mock_dependencies
+    ):
+        mock_cv2.TrackerCSRT_Params.return_value = MagicMock()
+        mock_cv2.TrackerCSRT_create.return_value = MockCSRTTracker()
+
+        from classes.trackers.csrt_tracker import CSRTTracker
+        video_handler, detector, app_controller = mock_dependencies
+
+        with patch('classes.trackers.csrt_tracker.Parameters') as mock_params:
+            mock_params.CSRT_Tracker = {
+                'performance_mode': 'robust',
+                'min_appearance_confidence': 'invalid',
+            }
+            mock_params.ClassicTracker_Common = {}
+            mock_params.CENTER_HISTORY_LENGTH = 100
+            mock_params.ESTIMATOR_HISTORY_LENGTH = 100
+            mock_params.USE_ESTIMATOR = False
+
+            tracker = CSRTTracker(video_handler, detector, app_controller)
+
+        assert tracker.min_appearance_confidence == pytest.approx(0.25)
 
 
 @pytest.mark.unit
@@ -642,6 +668,36 @@ class TestCSRTUpdate:
         assert tracker.last_measurement_timestamp == measurement_timestamp
         assert np.array_equal(tracker.detector.adaptive_features, adaptive_features)
         assert tracker.get_output().raw_data['usable_for_following'] is False
+
+    @patch('classes.trackers.csrt_tracker.cv2')
+    def test_short_term_continuity_does_not_reuse_detector_recovery_threshold(
+        self, mock_cv2, mock_dependencies
+    ):
+        """Moderate appearance change may remain a valid CSRT measurement."""
+        mock_cv2.TrackerCSRT_Params.return_value = MagicMock()
+        mock_cv2.TrackerCSRT_create.return_value = MockCSRTTracker(success_rate=1.0)
+        mock_cv2.__version__ = "4.13.0-test"
+
+        from classes.trackers.csrt_tracker import CSRTTracker
+        video_handler, detector, app_controller = mock_dependencies
+        tracker = CSRTTracker(video_handler, detector, app_controller)
+        tracker.performance_mode = 'balanced'
+        tracker.validation_start_frame = 10
+        tracker.enable_ema_smoothing = False
+        tracker.min_appearance_confidence = 0.25
+
+        frame = create_mock_test_frame()
+        bbox = create_mock_bbox()
+        tracker.start_tracking(frame, bbox)
+        tracker.detector.compute_appearance_confidence = MagicMock(return_value=0.60)
+
+        success, returned_bbox = tracker.update(frame)
+
+        assert success is True
+        assert returned_bbox == bbox
+        assert tracker.appearance_confidence == pytest.approx(0.60)
+        assert tracker.failure_count == 0
+        assert tracker.get_output().quality_metrics['appearance_floor'] == pytest.approx(0.25)
 
     @patch('classes.trackers.csrt_tracker.cv2')
     def test_startup_grace_freezes_adaptive_appearance_model(

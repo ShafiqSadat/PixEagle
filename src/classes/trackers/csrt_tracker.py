@@ -59,6 +59,17 @@ class CSRTTracker(BaseTracker):
         config = getattr(Parameters, self.CONFIG_SECTION, {})
         return config if isinstance(config, dict) else {}
 
+    @staticmethod
+    def _bounded_fraction(value, *, fallback: float) -> float:
+        """Return a finite unit-interval setting or its reviewed fallback."""
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return fallback
+        if not np.isfinite(numeric) or not 0.0 <= numeric <= 1.0:
+            return fallback
+        return numeric
+
     def _configure_performance_mode(self):
         """Configure tracker based on performance mode.
 
@@ -142,6 +153,10 @@ class CSRTTracker(BaseTracker):
         self.appearance_update_min_confidence = csrt_config.get(
             'appearance_update_min_confidence',
             self.appearance_update_min_confidence,
+        )
+        self.min_appearance_confidence = self._bounded_fraction(
+            csrt_config.get('min_appearance_confidence', 0.25),
+            fallback=0.25,
         )
 
         labels = {
@@ -376,19 +391,19 @@ class CSRTTracker(BaseTracker):
         return confidence >= self.confidence_threshold
 
     def _appearance_is_valid(self) -> bool:
-        """Apply the canonical detector appearance threshold when available."""
+        """Reject clear short-term appearance mismatches when available.
+
+        Detector-assisted reacquisition has a separate, stricter identity gate.
+        Reusing that gate here rejects valid short-term measurements during
+        ordinary lighting or background transitions before CSRT can adapt.
+        """
         if (
             not self.detector
             or not hasattr(self.detector, 'compute_appearance_confidence')
             or getattr(self.detector, 'adaptive_features', None) is None
         ):
             return True
-        try:
-            threshold = float(Parameters.APPEARANCE_CONFIDENCE_THRESHOLD)
-        except (AttributeError, TypeError, ValueError):
-            threshold = 0.7
-        threshold = max(0.0, min(1.0, threshold))
-        return self.appearance_confidence >= threshold
+        return self.appearance_confidence >= self.min_appearance_confidence
 
     def _update_legacy(
         self, frame, bbox, dt, start_time, *, update_appearance: bool = True
@@ -476,9 +491,11 @@ class CSRTTracker(BaseTracker):
         smoothed_confidence = self._smooth_confidence(raw_confidence)
         self.confidence = smoothed_confidence
 
+        confidence_valid = self._confidence_is_valid(smoothed_confidence)
+        appearance_valid = self._appearance_is_valid()
         candidate_valid = (
-            self._confidence_is_valid(smoothed_confidence)
-            and self._appearance_is_valid()
+            confidence_valid
+            and appearance_valid
             and motion_valid
             and scale_valid
         )
@@ -508,7 +525,7 @@ class CSRTTracker(BaseTracker):
             loss_reason = "scale_invalid"
         elif not motion_valid:
             loss_reason = "motion_invalid"
-        elif not self._appearance_is_valid():
+        elif not appearance_valid:
             loss_reason = "appearance_mismatch"
         else:
             loss_reason = "low_confidence"
@@ -537,8 +554,14 @@ class CSRTTracker(BaseTracker):
         self._log_performance(start_time)
         if self.failure_count == self.failure_threshold:
             logger.warning(
-                "Tracking lost after %d consecutive rejected measurements",
+                "%s confirmed loss after %d rejected measurements "
+                "(reason=%s, confidence=%.2f, motion=%.2f, appearance=%.2f)",
+                self.tracker_name,
                 self.failure_count,
+                loss_reason,
+                self.confidence,
+                self.motion_confidence,
+                self.appearance_confidence,
             )
         return False, self.bbox
 
@@ -553,7 +576,12 @@ class CSRTTracker(BaseTracker):
         self._build_failure_info(loss_reason)
         self._log_performance(start_time)
         if self.failure_count == self.failure_threshold:
-            logger.warning(f"Tracking lost after {self.failure_count} consecutive failures")
+            logger.warning(
+                "%s confirmed loss after %d native failures (reason=%s)",
+                self.tracker_name,
+                self.failure_count,
+                loss_reason,
+            )
         return False, self.bbox
 
     def stop_tracking(self) -> None:
@@ -575,6 +603,7 @@ class CSRTTracker(BaseTracker):
     def _output_quality_metrics(self) -> dict:
         return {
             'appearance_confidence': getattr(self, 'appearance_confidence', 1.0),
+            'appearance_floor': self.min_appearance_confidence,
         }
 
     def _output_raw_data(self) -> dict:
