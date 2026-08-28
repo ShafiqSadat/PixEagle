@@ -45,6 +45,21 @@ they do not prove target identity, field accuracy, or military-grade tracking.
 - Active infrastructure documentation: `31 passed`
 - Generated schema, Python syntax, and diff checks: passed
 
+## Runtime Handoff
+
+- Commit: `7476b2bd`
+- Run: `pixeagle_manual_03cb552c-83ca-4947-9f04-ce781c7b55d7`
+- Owned manual runtime status: healthy; dashboard and backend readiness passed
+- Dashboard loopback and selected network address: HTTP 200
+- Authenticated config status: source generation `current`, restart not required,
+  no pending changes
+- No retirement/schema exception or traceback appeared through the first video
+  loop. Tracking and following remained inactive; PX4 remained disconnected.
+
+MAVLink2REST is absent on this test host, so telemetry is degraded independently
+of the visual-tracking change. The preserved local config also keeps its prior
+opt-in frame preprocessing; it was not silently reset for this comparison.
+
 ## Remaining Gates
 
 Annotated identity/recovery scoring, target-camera cadence, Raspberry Pi,
