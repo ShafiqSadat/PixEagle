@@ -18,10 +18,12 @@ from aiortc.sdp import candidate_from_sdp
 from av import VideoFrame
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
+import ipaddress
 import json
 import logging
 import fractions
 import secrets
+import socket
 import time
 from typing import Any, Dict
 
@@ -135,26 +137,61 @@ class WebRTCManager:
         self.exposure_policy = exposure_policy
         self.api_auth_runtime: APIAuthRuntime | None = api_auth_runtime
         self.security_audit_logger = security_audit_logger
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(logging.INFO)
         self.peer_connections: Dict[str, RTCPeerConnection] = {}
         self.max_connections = getattr(Parameters, 'WEBRTC_MAX_CONNECTIONS', 3)
+        self.server_has_direct_public_ipv4 = self._default_route_has_public_ipv4()
         (
             rtc_ice_servers,
             self.ice_server_summary,
             self.browser_ice_servers,
-        ) = self._build_ice_server_records()
+        ) = self._build_ice_server_records(
+            server_has_direct_public_ipv4=self.server_has_direct_public_ipv4,
+        )
         self.rtc_configuration = RTCConfiguration(iceServers=rtc_ice_servers)
         self._signaling_capacity_lock = asyncio.Lock()
         self._active_signaling_sessions = 0
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(logging.INFO)
+        if (
+            self.server_has_direct_public_ipv4
+            and str(getattr(Parameters, "WEBRTC_STUN_SERVER", "") or "").strip()
+        ):
+            self.logger.info(
+                "Direct public IPv4 route detected; browser STUN remains enabled "
+                "while redundant server-side STUN gathering is skipped"
+            )
 
     @staticmethod
-    def _build_ice_server_records() -> tuple[
+    def _default_route_has_public_ipv4() -> bool:
+        """Return whether the default IPv4 route already owns a public address.
+
+        A UDP connect selects a route and source address without sending a
+        datagram. Failure or a private/CGNAT source conservatively retains STUN.
+        """
+        route_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            route_socket.connect(("192.0.2.1", 9))
+            source_address = route_socket.getsockname()[0]
+            return ipaddress.ip_address(source_address).is_global
+        except (OSError, ValueError):
+            return False
+        finally:
+            route_socket.close()
+
+    @staticmethod
+    def _build_ice_server_records(
+        *,
+        server_has_direct_public_ipv4: bool | None = None,
+    ) -> tuple[
         list[RTCIceServer],
         list[dict[str, Any]],
         list[dict[str, Any]],
     ]:
         """Build validated server and authorized-browser ICE records."""
+        if server_has_direct_public_ipv4 is None:
+            server_has_direct_public_ipv4 = (
+                WebRTCManager._default_route_has_public_ipv4()
+            )
         ice_servers = []
         summary = []
         browser_servers = []
@@ -162,12 +199,30 @@ class WebRTCManager:
         stun_url = str(getattr(Parameters, "WEBRTC_STUN_SERVER", "") or "").strip()
         if stun_url:
             if stun_url.lower().startswith(("stun:", "stuns:")):
-                ice_servers.append(RTCIceServer(urls=stun_url))
-                summary.append({"kind": "stun", "url": stun_url, "configured": True})
+                server_configured = not server_has_direct_public_ipv4
+                if server_configured:
+                    ice_servers.append(RTCIceServer(urls=stun_url))
+                summary.append(
+                    {
+                        "kind": "stun",
+                        "url": stun_url,
+                        "configured": True,
+                        "browser_configured": True,
+                        "server_configured": server_configured,
+                    }
+                )
                 browser_servers.append({"urls": stun_url})
             else:
                 logger.error("Ignoring WEBRTC_STUN_SERVER with unsupported scheme")
-                summary.append({"kind": "stun", "url": None, "configured": False})
+                summary.append(
+                    {
+                        "kind": "stun",
+                        "url": None,
+                        "configured": False,
+                        "browser_configured": False,
+                        "server_configured": False,
+                    }
+                )
 
         turn_url = str(getattr(Parameters, "WEBRTC_TURN_SERVER", "") or "").strip()
         turn_username = str(
@@ -221,9 +276,14 @@ class WebRTCManager:
         return ice_servers, summary, browser_servers
 
     @staticmethod
-    def _build_rtc_configuration() -> tuple[RTCConfiguration, list[dict[str, Any]]]:
+    def _build_rtc_configuration(
+        *,
+        server_has_direct_public_ipv4: bool | None = None,
+    ) -> tuple[RTCConfiguration, list[dict[str, Any]]]:
         """Build server-side ICE configuration without exposing TURN secrets."""
-        ice_servers, summary, _ = WebRTCManager._build_ice_server_records()
+        ice_servers, summary, _ = WebRTCManager._build_ice_server_records(
+            server_has_direct_public_ipv4=server_has_direct_public_ipv4,
+        )
         return RTCConfiguration(iceServers=ice_servers), summary
 
     def get_browser_ice_servers(self) -> list[dict[str, Any]]:
@@ -574,11 +634,55 @@ class WebRTCManager:
         """Close and remove a peer connection, unregister from FramePublisher."""
         pc = self.peer_connections.pop(peer_id, None)
         if pc is not None:
+            diagnostic = await self._peer_diagnostic_summary(pc)
             try:
                 await self._close_peer_connection(peer_id, pc)
             finally:
                 self.frame_publisher.unregister_client()
-                self.logger.info(f"Cleaned up RTCPeerConnection for {peer_id}")
+                self.logger.info(
+                    "Cleaned up RTCPeerConnection for %s: %s",
+                    peer_id,
+                    json.dumps(diagnostic, sort_keys=True),
+                )
+
+    @staticmethod
+    async def _peer_diagnostic_summary(pc: RTCPeerConnection) -> Dict[str, Any]:
+        """Return bounded transport counters without candidate addresses."""
+        summary: Dict[str, Any] = {
+            "connection_state": str(getattr(pc, "connectionState", "unknown")),
+            "ice_connection_state": str(
+                getattr(pc, "iceConnectionState", "unknown")
+            ),
+            "ice_gathering_state": str(getattr(pc, "iceGatheringState", "unknown")),
+            "signaling_state": str(getattr(pc, "signalingState", "unknown")),
+            "video_bytes_sent": 0,
+            "video_packets_sent": 0,
+        }
+        get_stats = getattr(pc, "getStats", None)
+        if not callable(get_stats):
+            return summary
+        try:
+            report = await asyncio.wait_for(get_stats(), timeout=0.25)
+            for stat in report.values():
+                if (
+                    getattr(stat, "type", None) == "outbound-rtp"
+                    and getattr(stat, "kind", None) == "video"
+                ):
+                    summary["video_bytes_sent"] += max(
+                        0,
+                        int(getattr(stat, "bytesSent", 0) or 0),
+                    )
+                    summary["video_packets_sent"] += max(
+                        0,
+                        int(getattr(stat, "packetsSent", 0) or 0),
+                    )
+        except (asyncio.TimeoutError, TypeError, ValueError):
+            summary["stats_available"] = False
+        except Exception:
+            summary["stats_available"] = False
+        else:
+            summary["stats_available"] = True
+        return summary
 
     async def shutdown(self) -> int:
         """Close all active peer connections owned by this manager."""

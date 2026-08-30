@@ -10,6 +10,7 @@ import {
   subscribeDashboardAuthSession,
 } from '../services/apiClient';
 import { createLatestJpegFrameRenderer } from '../services/latestJpegFrameRenderer';
+import { reportFrontendError } from '../services/frontendErrorReporter';
 import { Box, Typography, Chip, IconButton, Slider, CircularProgress } from '@mui/material';
 import { SignalCellular4Bar, SignalCellular2Bar, SignalCellular0Bar, Settings, Videocam } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -630,9 +631,16 @@ const VideoStream = ({
     const pendingLocalCandidates = [];
     const pendingRemoteCandidates = [];
     let previousInboundStats = null;
+    let latestInboundStats = {
+      bytesReceived: 0,
+      packetsReceived: 0,
+      framesDecoded: 0,
+    };
     let hasRemoteVideoTrack = false;
     let iceMediaConnected = false;
     let frameDeadlineStarted = false;
+    let negotiationPhase = 'initializing';
+    const attemptStartedAt = Date.now();
     setIsConnecting(true);
     setHasReceivedFrame(false);
     hasReceivedFrameRef.current = false;
@@ -715,6 +723,24 @@ const VideoStream = ({
     const handleFailure = (reason, message = null, { authRejected = false } = {}) => {
       if (!isMounted || failureHandled) return;
       failureHandled = true;
+      if (!authRejected) {
+        const diagnostic = [
+          `WebRTC transport failed: ${reason}`,
+          `phase=${negotiationPhase}`,
+          `ice=${pc.iceConnectionState || 'unknown'}`,
+          `connection=${pc.connectionState || 'unknown'}`,
+          `signaling=${pc.signalingState || 'unknown'}`,
+          `remote_video_track=${hasRemoteVideoTrack}`,
+          `bytes_received=${latestInboundStats.bytesReceived}`,
+          `packets_received=${latestInboundStats.packetsReceived}`,
+          `frames_decoded=${latestInboundStats.framesDecoded}`,
+          `elapsed_ms=${Math.max(0, Date.now() - attemptStartedAt)}`,
+        ].join('; ');
+        void reportFrontendError(
+          { name: 'WebRTCTransportFailure', message: diagnostic },
+          { kind: 'webrtc_transport_failure' }
+        );
+      }
       closeWebRTCTransport();
       if (authRejected) {
         setError(message || 'WebRTC signaling authorization was rejected. Sign in again.');
@@ -730,6 +756,7 @@ const VideoStream = ({
     };
 
     const scheduleNegotiationDeadline = (phase, timeoutMs) => {
+      negotiationPhase = phase;
       clearWebRTCNegotiationTimeout();
       if (!isMounted || failureHandled || hasReceivedFrameRef.current) return;
 
@@ -745,6 +772,7 @@ const VideoStream = ({
     };
 
     const scheduleFrameDeadline = () => {
+      negotiationPhase = 'first decoded frame';
       clearWebRTCFrameTimeout();
       if (!isMounted || failureHandled || hasReceivedFrameRef.current) return;
 
@@ -776,6 +804,7 @@ const VideoStream = ({
 
     const noteDecodedWebRTCFrame = () => {
       if (!isMounted) return;
+      negotiationPhase = 'decoded frame';
       handleWebRTCFrameReady();
       updateFPS();
       setStreamStats(prev => ({
@@ -825,6 +854,11 @@ const VideoStream = ({
           }
         }
         if (inbound) {
+          latestInboundStats = {
+            bytesReceived: Number(inbound.bytesReceived || 0),
+            packetsReceived: Number(inbound.packetsReceived || 0),
+            framesDecoded: Number(inbound.framesDecoded || 0),
+          };
           previousInboundStats = {
             timestamp: inbound.timestamp,
             bytesReceived: inbound.bytesReceived,
@@ -1004,6 +1038,7 @@ const VideoStream = ({
         && videoRef.current
         && remoteStream
       ) {
+        negotiationPhase = 'remote video track';
         hasRemoteVideoTrack = true;
         videoRef.current.srcObject = remoteStream;
         stopFrameMonitor();
@@ -1047,6 +1082,7 @@ const VideoStream = ({
       } else if (
         (state === 'connected' || state === 'completed')
       ) {
+        negotiationPhase = 'ICE connected';
         iceMediaConnected = true;
         clearWebRTCDisconnectTimeout();
         maybeStartFrameDeadline();

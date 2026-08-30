@@ -87,7 +87,10 @@ PX4 command dispatch.
    `browser_session` deployments should use the signed-in dashboard instead of
    exporting a browser cookie into shell history.
 
-6. Stop the test before changing the follower profile or source.
+6. Stop the test before changing the follower profile or source. Runtime logs
+   retain one bounded stop summary with accepted/rejected/failsafe counts and
+   the final retained intent fields; it always records
+   `commands_sent_to_px4=false`.
 
 The action label is selected from the typed execution mode. `COMMAND_PREVIEW`
 shows **Start Follower Test**; `PX4` shows **Start Following**. The circuit

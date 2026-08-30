@@ -155,7 +155,7 @@ retirements:
         )
 
         with pytest.raises(ValueError, match="Duplicate config retirement path"):
-            config_service.get_retirement_registry()
+            config_service._get_retirement_registry_locked(cache=False)
 
     def test_retirement_registry_rejects_active_paths(self, config_service):
         registry_path = config_service._project_root / "configs" / "config_retirements.yaml"
@@ -174,7 +174,7 @@ retirements:
         )
 
         with pytest.raises(ValueError, match="still active in defaults/schema"):
-            config_service.get_retirement_registry()
+            config_service._get_retirement_registry_locked(cache=False)
 
     def test_retirement_registry_rejects_incomplete_entries(self, config_service):
         registry_path = config_service._project_root / "configs" / "config_retirements.yaml"
@@ -192,7 +192,7 @@ retirements:
         )
 
         with pytest.raises(ValueError, match="missing replacement"):
-            config_service.get_retirement_registry()
+            config_service._get_retirement_registry_locked(cache=False)
 
     def test_retirement_registry_rejects_future_schema_versions(self, config_service):
         registry_path = config_service._project_root / "configs" / "config_retirements.yaml"
@@ -211,7 +211,7 @@ retirements:
         )
 
         with pytest.raises(ValueError, match="targets future schema"):
-            config_service.get_retirement_registry()
+            config_service._get_retirement_registry_locked(cache=False)
 
     def test_nested_retirement_is_validated_and_removed_exactly(self, config_service):
         registry_path = config_service._project_root / "configs" / "config_retirements.yaml"

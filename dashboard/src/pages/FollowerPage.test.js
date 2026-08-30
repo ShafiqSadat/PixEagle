@@ -2,6 +2,7 @@ import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import axios from 'axios';
 import { endpoints } from '../services/apiEndpoints';
+import { getPollingFreshnessDeadlines } from '../hooks/useStatuses';
 import FollowerPage from './FollowerPage';
 
 jest.mock('axios');
@@ -236,6 +237,8 @@ test('polls typed tracking and following telemetry for follower history visualiz
 
 test('serializes polling batches and bounds a slow sample as stale then unavailable', async () => {
   jest.useFakeTimers();
+  const pollingRate = Number.parseInt(process.env.REACT_APP_POLLING_RATE, 10) || 1000;
+  const { staleAfterMs, unavailableAfterMs } = getPollingFreshnessDeadlines(pollingRate);
   let resolveSecondTracker;
   let resolveSecondFollower;
   let trackerRequests = 0;
@@ -274,25 +277,26 @@ test('serializes polling batches and bounds a slow sample as stale then unavaila
   try {
     render(<FollowerPage />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('polling-status')).toHaveTextContent('active');
+    await act(async () => {
+      await Promise.resolve();
     });
+    expect(screen.getByTestId('polling-status')).toHaveTextContent('active');
     expect(screen.getByText('Following: Active')).toBeInTheDocument();
 
     await act(async () => {
-      jest.advanceTimersByTime(1000);
+      jest.advanceTimersByTime(pollingRate);
     });
     expect(trackerRequests).toBe(2);
     expect(followerRequests).toBe(2);
 
     act(() => {
-      jest.advanceTimersByTime(2000);
+      jest.advanceTimersByTime(staleAfterMs - pollingRate);
     });
     expect(screen.getByTestId('polling-status')).toHaveTextContent('stale');
     expect(screen.getByText('Following: Stale')).toBeInTheDocument();
 
     act(() => {
-      jest.advanceTimersByTime(3000);
+      jest.advanceTimersByTime(unavailableAfterMs - staleAfterMs);
     });
     expect(trackerRequests).toBe(2);
     expect(followerRequests).toBe(2);

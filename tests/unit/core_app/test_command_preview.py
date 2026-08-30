@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 import time
 from types import SimpleNamespace
@@ -85,7 +86,8 @@ class _PreviewApp:
 
 
 @pytest.mark.asyncio
-async def test_command_preview_records_schema_valid_intents_without_px4():
+async def test_command_preview_records_schema_valid_intents_without_px4(caplog):
+    caplog.set_level(logging.INFO, logger="classes.command_preview")
     handler = SetpointHandler("mc_velocity_chase")
     commander = CommandPreviewCommander(handler, max_history=2)
 
@@ -114,6 +116,22 @@ async def test_command_preview_records_schema_valid_intents_without_px4():
     assert stopped["running"] is False
     assert stopped["failsafe_defaults_active"] is True
     assert stopped["commands_sent_to_px4"] is False
+    stop_record = next(
+        record for record in caplog.records
+        if record.message.startswith("Command preview stopped:")
+    )
+    stop_summary = json.loads(stop_record.message.split(": ", 1)[1])
+    assert stop_summary == {
+        "accepted_intents": 1,
+        "commands_sent_to_px4": False,
+        "failsafe_events": 1,
+        "last_retained_intent": {
+            "control_type": handler.get_control_type(),
+            "fields": intent.fields,
+            "profile_name": handler.profile_name,
+        },
+        "rejected_intents": 0,
+    }
 
 
 def test_command_preview_preserves_raw_follower_math_but_rejects_nonfinite_values():

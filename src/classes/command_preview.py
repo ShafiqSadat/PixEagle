@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import asdict
+import json
 import logging
 import time
 from typing import Any, Deque, Dict, Optional
@@ -167,7 +168,23 @@ class CommandPreviewCommander:
             self.activate_failsafe_defaults("operator_stop")
         self.running = False
         self.last_event = "stopped"
-        logger.info("Command preview stopped")
+        last_intent = self._intent_history[-1] if self._intent_history else None
+        summary = {
+            "accepted_intents": self.accepted_intents,
+            "rejected_intents": self.rejected_intents,
+            "failsafe_events": self.failsafe_events,
+            "commands_sent_to_px4": False,
+            "last_retained_intent": (
+                {
+                    "profile_name": last_intent.profile_name,
+                    "control_type": last_intent.control_type,
+                    "fields": last_intent.fields,
+                }
+                if last_intent is not None
+                else None
+            ),
+        }
+        logger.info("Command preview stopped: %s", json.dumps(summary, sort_keys=True))
         return True
 
     def submit_intent(self, intent: CommandIntent) -> bool:

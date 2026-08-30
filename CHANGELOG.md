@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## Version 7.2.0 (2026-08-30) - Tracking and Command Continuity
+
+- Reduce WebRTC answer latency on directly routed public IPv4 hosts by keeping
+  browser STUN enabled while skipping redundant server-side STUN gathering.
+  Private, CGNAT, and uncertain routes retain STUN; configured TURN remains
+  unchanged. Add bounded browser-failure and server-peer media diagnostics
+  without logging ICE addresses or credentials.
+- Record a bounded command-preview stop summary with accepted, rejected, and
+  failsafe counts plus the final retained schema-valid intent. The preview
+  boundary continues to have no PX4/MAVSDK publisher.
+
 - Replace follower-specific target-loss timers and command behaviors with one
   `TargetContinuitySupervisor` between nominal follower intents and the
   Offboard publisher. Unusable or identity-ambiguous evidence can no longer
@@ -61,8 +72,6 @@
   and operator documentation. An exact unannotated 500-frame replay produced
   461 usable measurements at 81.0 ms median on the test VPS; target hardware,
   annotated accuracy, identity, camera, and field validation remain pending.
-
-## Version 7.2.0 (2026-08-26) - VitTrack Candidate
 
 - Add `VitTrack`, an opt-in OpenCV model-backed classic tracker that combines
   native model confidence with PixEagle's shared motion, scale, appearance,

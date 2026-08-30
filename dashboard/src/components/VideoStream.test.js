@@ -9,12 +9,17 @@ import {
   setDashboardAuthSession,
 } from '../services/apiClient';
 import { createLatestJpegFrameRenderer } from '../services/latestJpegFrameRenderer';
+import { reportFrontendError } from '../services/frontendErrorReporter';
 
 jest.mock('../services/latestJpegFrameRenderer', () => ({
   createLatestJpegFrameRenderer: jest.fn(() => ({
     enqueue: jest.fn(),
     close: jest.fn(),
   })),
+}));
+
+jest.mock('../services/frontendErrorReporter', () => ({
+  reportFrontendError: jest.fn().mockResolvedValue({ accepted: true }),
 }));
 
 const STREAMING_CLIENT_CONFIG = {
@@ -35,6 +40,7 @@ describe('VideoStream browser-session media authorization', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     clearDashboardAuthSession(null);
     createLatestJpegFrameRenderer.mockClear();
+    reportFrontendError.mockClear();
     jest.spyOn(apiClient, 'apiFetchJson').mockResolvedValue(STREAMING_CLIENT_CONFIG);
   });
 
@@ -653,6 +659,13 @@ describe('VideoStream browser-session media authorization', () => {
       expect(global.WebSocket).toHaveBeenCalledTimes(2);
     });
     expect(sockets[1].url).toContain('/ws/video_feed');
+    expect(reportFrontendError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'WebRTCTransportFailure',
+        message: expect.stringContaining('server answer did not complete within 12s'),
+      }),
+      { kind: 'webrtc_transport_failure' }
+    );
   });
 
   test('auto protocol falls back when WebRTC offer creation stalls', async () => {

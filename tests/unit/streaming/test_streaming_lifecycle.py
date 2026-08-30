@@ -562,7 +562,9 @@ def test_webrtc_ice_configuration_uses_stun_and_turn_without_exposing_secret(
         raising=False,
     )
 
-    configuration, summary = WebRTCManager._build_rtc_configuration()
+    configuration, summary = WebRTCManager._build_rtc_configuration(
+        server_has_direct_public_ipv4=False,
+    )
 
     assert len(configuration.iceServers) == 2
     assert configuration.iceServers[0].urls == "stun:stun.example.test:3478"
@@ -574,6 +576,8 @@ def test_webrtc_ice_configuration_uses_stun_and_turn_without_exposing_secret(
             "kind": "stun",
             "url": "stun:stun.example.test:3478",
             "configured": True,
+            "browser_configured": True,
+            "server_configured": True,
         },
         {
             "kind": "turn",
@@ -607,7 +611,9 @@ def test_webrtc_ice_configuration_rejects_partial_turn_credentials(monkeypatch):
         raising=False,
     )
 
-    configuration, summary = WebRTCManager._build_rtc_configuration()
+    configuration, summary = WebRTCManager._build_rtc_configuration(
+        server_has_direct_public_ipv4=False,
+    )
 
     assert configuration.iceServers == []
     assert summary == [
@@ -642,7 +648,9 @@ def test_webrtc_browser_ice_records_include_authorized_turn_material_only(monkey
         raising=False,
     )
 
-    _rtc, summary, browser = WebRTCManager._build_ice_server_records()
+    _rtc, summary, browser = WebRTCManager._build_ice_server_records(
+        server_has_direct_public_ipv4=False,
+    )
 
     assert browser == [
         {"urls": "stun:stun.example.test:3478"},
@@ -653,6 +661,98 @@ def test_webrtc_browser_ice_records_include_authorized_turn_material_only(monkey
         },
     ]
     assert "short-lived-secret" not in repr(summary)
+
+
+def test_webrtc_direct_public_server_skips_only_redundant_server_stun(monkeypatch):
+    monkeypatch.setattr(
+        "classes.webrtc_manager.Parameters.WEBRTC_STUN_SERVER",
+        "stun:stun.example.test:3478",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "classes.webrtc_manager.Parameters.WEBRTC_TURN_SERVER",
+        "",
+        raising=False,
+    )
+
+    rtc, summary, browser = WebRTCManager._build_ice_server_records(
+        server_has_direct_public_ipv4=True,
+    )
+
+    assert rtc == []
+    assert browser == [{"urls": "stun:stun.example.test:3478"}]
+    assert summary == [
+        {
+            "kind": "stun",
+            "url": "stun:stun.example.test:3478",
+            "configured": True,
+            "browser_configured": True,
+            "server_configured": False,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source_address", "expected"),
+    [
+        ("203.0.113.10", False),
+        ("10.0.0.8", False),
+        ("8.8.8.8", True),
+    ],
+)
+def test_webrtc_default_route_public_address_detection(
+    monkeypatch,
+    source_address,
+    expected,
+):
+    route_socket = MagicMock()
+    route_socket.getsockname.return_value = (source_address, 49152)
+    monkeypatch.setattr(
+        "classes.webrtc_manager.socket.socket",
+        MagicMock(return_value=route_socket),
+    )
+
+    assert WebRTCManager._default_route_has_public_ipv4() is expected
+    route_socket.connect.assert_called_once_with(("192.0.2.1", 9))
+    route_socket.close.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_webrtc_peer_diagnostic_is_bounded_to_states_and_video_counters():
+    peer = SimpleNamespace(
+        connectionState="connected",
+        iceConnectionState="completed",
+        iceGatheringState="complete",
+        signalingState="stable",
+        getStats=AsyncMock(
+            return_value={
+                "video": SimpleNamespace(
+                    type="outbound-rtp",
+                    kind="video",
+                    bytesSent=4096,
+                    packetsSent=32,
+                ),
+                "audio": SimpleNamespace(
+                    type="outbound-rtp",
+                    kind="audio",
+                    bytesSent=8192,
+                    packetsSent=64,
+                ),
+            }
+        ),
+    )
+
+    summary = await WebRTCManager._peer_diagnostic_summary(peer)
+
+    assert summary == {
+        "connection_state": "connected",
+        "ice_connection_state": "completed",
+        "ice_gathering_state": "complete",
+        "signaling_state": "stable",
+        "stats_available": True,
+        "video_bytes_sent": 4096,
+        "video_packets_sent": 32,
+    }
 
 
 @pytest.mark.asyncio

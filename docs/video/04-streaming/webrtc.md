@@ -47,11 +47,14 @@ Streaming:
   WEBRTC_TURN_CREDENTIAL: ""
 ```
 
-PixEagle applies these ICE servers to the server-side `aiortc` peer. A TURN URL
-must use `turn:` or `turns:`. Set both TURN credential fields or leave both
-empty; a partial credential pair is rejected. The media-health API reports only
-the server kind, URL, and whether credentials are configured. It never returns
-the username or credential.
+The browser always receives a valid configured STUN server. On a host whose
+default route already owns a globally routable IPv4 address, PixEagle skips
+redundant server-side STUN gathering and advertises its direct host candidate;
+private, CGNAT, and uncertain routes retain server-side STUN. A TURN URL must
+use `turn:` or `turns:` and remains available to both peers in either case. Set
+both TURN credential fields or leave both empty; a partial credential pair is
+rejected. The media-health API reports only the server kind, URL, and whether
+credentials are configured. It never returns the username or credential.
 
 The dashboard reads its runtime transport and ICE settings from
 `GET /api/v1/streams/client-config`. That authenticated, `no-store` response
@@ -133,6 +136,12 @@ and verifies the required rules. Cleanup matches unique ownership comments
 rather than deleting by port alone. Do not carry the broad bench rule into a
 production deployment.
 
+Failed browser attempts submit one rate-limited authenticated diagnostic with
+the negotiation phase, peer states, elapsed time, remote-track presence, and
+inbound video counters. Server cleanup records the corresponding peer states
+and outbound video counters. Neither diagnostic includes SDP, ICE candidate
+addresses, cookies, or credentials.
+
 Authentication and ICE reachability are separate boundaries. The anonymous
 media lab flag applies only to MJPEG and WebSocket JPEG; it does not bypass
 WebRTC signaling authorization or create a UDP path through a host firewall or
@@ -158,6 +167,11 @@ The dashboard does not hard-code a separate ICE list. Configuring
 client-config response as well as to the server peer. This is end-to-end
 browser readiness only when the TURN service, credentials, firewall, and
 expiry/rotation policy have been tested together.
+
+An independent remote Chrome 139 lab probe on 2026-08-30 completed signaling,
+ICE, and decoded 640x480 media against the directly routed public test host.
+That is scoped software evidence for this route and browser only; it is not
+TURN, restrictive-NAT, production-TLS, target-hardware, or field evidence.
 
 ## Implementation
 
