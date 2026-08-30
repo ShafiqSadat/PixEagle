@@ -28,19 +28,7 @@ from classes.followers.custom_pid import CustomPID
 # Initialize logger before imports that might fail
 logger = logging.getLogger(__name__)
 
-# NOTE: Advanced gimbal transformation and target loss handling modules are optional
-# The gimbal follower uses simplified, integrated coordinate transformation
-# and target loss handling rather than separate architecture components
-try:
-    from classes.target_loss_handler import (
-        create_target_loss_handler, TargetLossHandler, ResponseAction
-    )
-    TARGET_LOSS_HANDLER_AVAILABLE = True
-except ImportError as e:
-    logger.warning(f"Advanced target loss handler not available: {e}")
-    TARGET_LOSS_HANDLER_AVAILABLE = False
-
-# Import VelocityCommand for legacy callback methods
+# Import the shared velocity-command value object.
 try:
     from classes.gimbal_transforms import VelocityCommand
 except ImportError:
@@ -101,25 +89,6 @@ class GMVelocityChaseFollower(BaseFollower):
         # Initialize base follower with gimbal_unified setpoint profile
         super().__init__(px4_controller, self.setpoint_profile)
 
-        # State flags
-        self.velocity_continuation_active = False
-
-        # Initialize target loss handler (optional advanced feature)
-        self.target_loss_handler = None
-        if TARGET_LOSS_HANDLER_AVAILABLE:
-            target_loss_config = self.config.get('TARGET_LOSS_HANDLING', {})
-            try:
-                self.target_loss_handler = create_target_loss_handler(target_loss_config, self.follower_name)
-                # Only register callbacks if handler was successfully created (not None)
-                if self.target_loss_handler is not None:
-                    self._register_target_loss_callbacks()
-                    logger.info(f"Target loss handler initialized with {target_loss_config.get('CONTINUE_VELOCITY_TIMEOUT', 3.0)}s timeout")
-                else:
-                    logger.warning("Target loss handler creation returned None - using basic target loss logic")
-            except Exception as e:
-                logger.warning(f"Failed to initialize target loss handler: {e} - using basic target loss logic")
-                self.target_loss_handler = None
-
         # Control parameters - velocity limits from base class cached limits (via SafetyManager)
         self.max_velocity = self.velocity_limits.forward
         self.max_velocity_lateral = self.velocity_limits.lateral
@@ -160,7 +129,6 @@ class GMVelocityChaseFollower(BaseFollower):
         # Statistics
         self.total_follow_calls = 0
         self.successful_transformations = 0
-        self.target_loss_events = 0
         self.safety_interventions = 0
 
         # === Forward Velocity Control System ===
@@ -670,76 +638,6 @@ class GMVelocityChaseFollower(BaseFollower):
         except Exception as e:
             logger.error(f"Error switching lateral mode to {new_mode}: {e}")
 
-    def _register_target_loss_callbacks(self):
-        """Register callbacks for target loss response actions."""
-
-        def continue_velocity_callback(response_data: Dict[str, Any]) -> bool:
-            """Handle velocity continuation during target loss."""
-            try:
-                if self.last_velocity_command and response_data.get('velocity_continuation', False):
-                    # Apply velocity decay if configured
-                    velocity_cmd = self.last_velocity_command
-                    decay_factor = response_data.get('velocity_decay_factor', 1.0)
-
-                    if decay_factor < 1.0:
-                        # Apply decay to velocity command
-                        velocity_cmd.forward *= decay_factor
-                        velocity_cmd.right *= decay_factor
-                        velocity_cmd.yaw_rate *= decay_factor
-
-                        logger.debug(f"Applied velocity decay: factor={decay_factor:.3f}")
-
-                    # Continue with last velocity (with optional decay)
-                    self._apply_velocity_command(velocity_cmd, "target_loss_continuation")
-                    return True
-                return False
-            except Exception as e:
-                logger.error(f"Error in continue velocity callback: {e}")
-                return False
-
-        def rtl_callback(response_data: Dict[str, Any]) -> bool:
-            """Handle Return to Launch trigger."""
-            try:
-                if response_data.get('trigger_rtl', False):
-                    rtl_altitude = response_data.get('rtl_altitude', self.config.get('TARGET_LOSS_HANDLING', {}).get('RTL_ALTITUDE', 50.0))
-
-                    logger.warning(f"Target loss timeout - triggering RTL at {rtl_altitude}m altitude")
-
-                    # Log the RTL event
-                    self.log_follower_event(
-                        "target_loss_rtl_triggered",
-                        loss_duration=response_data.get('metadata', {}).get('loss_duration', 0.0),
-                        rtl_altitude=rtl_altitude,
-                        circuit_breaker_blocked=response_data.get('circuit_breaker_blocked', False)
-                    )
-
-                    # Trigger RTL if not blocked by circuit breaker
-                    if not response_data.get('circuit_breaker_blocked', False):
-                        self.trigger_return_to_launch(reason="target_loss_timeout", altitude=rtl_altitude)
-
-                    return True
-                return False
-            except Exception as e:
-                logger.error(f"Error in RTL callback: {e}")
-                return False
-
-        def hold_position_callback(response_data: Dict[str, Any]) -> bool:
-            """Handle hold position command."""
-            try:
-                # Send zero velocity command to hold position
-                hold_command = VelocityCommand(0.0, 0.0, 0.0, 0.0)
-                self._apply_velocity_command(hold_command, "target_loss_hold_position")
-                logger.info("Holding position due to target loss")
-                return True
-            except Exception as e:
-                logger.error(f"Error in hold position callback: {e}")
-                return False
-
-        # Register the callbacks
-        self.target_loss_handler.register_response_callback(ResponseAction.CONTINUE_VELOCITY, continue_velocity_callback)
-        self.target_loss_handler.register_response_callback(ResponseAction.RETURN_TO_LAUNCH, rtl_callback)
-        self.target_loss_handler.register_response_callback(ResponseAction.HOLD_POSITION, hold_position_callback)
-
     def calculate_control_commands(self, tracker_data: TrackerOutput) -> None:
         """
         Calculate control commands based on tracker data and update the setpoint handler.
@@ -907,46 +805,13 @@ class GMVelocityChaseFollower(BaseFollower):
                 self.log_follower_event("safety_intervention", **safety_status)
                 return False
 
-            # Handle target loss logic (with or without advanced handler)
-            tracking_active = tracker_output.tracking_active
-
-            if self.target_loss_handler:
-                # Use advanced target loss handler if available
-                loss_response = self.target_loss_handler.update_tracker_status(tracker_output)
-                tracking_active = loss_response['tracking_active']
-
-                # Log state changes
-                if loss_response.get('state_changed', False):
-                    self.log_follower_event(
-                        "target_state_change",
-                        new_state=loss_response['target_state'],
-                        tracking_active=tracking_active,
-                        recommended_actions=loss_response.get('recommended_actions', [])
-                    )
-
-            # Check if we should continue with normal following
-            if tracking_active:
-                # Normal tracking - extract gimbal angles and transform
-                success = self._process_normal_tracking(tracker_output, current_time)
-                if success:
-                    self.successful_transformations += 1
-                return success
-            else:
-                # Target lost - use basic or advanced target loss handling
-                if self.target_loss_handler:
-                    logger.debug(f"Target lost - state: {loss_response.get('target_state', 'LOST')}, actions: {loss_response.get('recommended_actions', [])}")
-                    if self._target_loss_response_should_publish(loss_response):
-                        return True
-                    if self._target_loss_response_stops_publication(loss_response):
-                        return False
-                    self._apply_target_loss_fail_closed(loss_response)
-                    return True
-                else:
-                    logger.debug("Target lost - using basic target loss handling")
-                    self._apply_target_loss_fail_closed({'target_state': 'LOST'})
-                    return True
-
+            if not self.validate_tracker_compatibility(tracker_output):
                 return False
+
+            success = self._process_normal_tracking(tracker_output, current_time)
+            if success:
+                self.successful_transformations += 1
+            return success
 
         except Exception as e:
             logger.error(f"Error in follow_target: {e}")
@@ -955,55 +820,6 @@ class GMVelocityChaseFollower(BaseFollower):
 
         finally:
             self.last_update_time = current_time
-
-    def should_process_inactive_tracker_output(self, tracker_output: TrackerOutput) -> bool:
-        """
-        Route inactive gimbal output through target-loss handling.
-
-        The gimbal chase follower can publish an intentional target-loss
-        command: continue the current setpoint during the configured grace
-        period, apply a callback-generated hold/decay command, or stop the
-        command stream when RTL has been requested.
-        """
-        return self._is_inactive_tracker_output(
-            tracker_output,
-            allowed_types={TrackerDataType.GIMBAL_ANGLES, TrackerDataType.ANGULAR},
-        )
-
-    def _target_loss_response_stops_publication(self, loss_response: Dict[str, Any]) -> bool:
-        """Return True when target-loss handling intentionally stops setpoints."""
-        if not loss_response:
-            return False
-
-        return bool(
-            loss_response.get('trigger_rtl') or
-            loss_response.get(f'{ResponseAction.RETURN_TO_LAUNCH.value.lower()}_callback_result')
-        )
-
-    def _target_loss_response_should_publish(self, loss_response: Dict[str, Any]) -> bool:
-        """Return True only when target-loss handling produced a command."""
-        if not loss_response or self._target_loss_response_stops_publication(loss_response):
-            return False
-
-        callback_results = [
-            value
-            for key, value in loss_response.items()
-            if key.endswith('_callback_result') and
-            key != f'{ResponseAction.RETURN_TO_LAUNCH.value.lower()}_callback_result'
-        ]
-        return any(callback_results)
-
-    def _apply_target_loss_fail_closed(self, loss_response: Dict[str, Any]) -> None:
-        """Publish a deterministic zero command when no loss callback did so."""
-        self._apply_velocity_command(
-            VelocityCommand(0.0, 0.0, 0.0, 0.0),
-            "target_loss_fail_closed",
-        )
-        self.log_follower_event(
-            "target_loss_fail_closed",
-            target_state=loss_response.get('target_state', 'UNKNOWN'),
-            recommended_actions=loss_response.get('recommended_actions', []),
-        )
 
     def _process_normal_tracking(self, tracker_output: TrackerOutput, current_time: float) -> bool:
         """
@@ -1064,7 +880,7 @@ class GMVelocityChaseFollower(BaseFollower):
         """
         Apply velocity command to the drone.
 
-        NOTE: This method is primarily used by target loss handler callbacks.
+        NOTE: This method is available for explicit local velocity reset paths.
         Normal gimbal control publishes an atomic command intent through
         set_command_fields().
 
@@ -1270,10 +1086,6 @@ class GMVelocityChaseFollower(BaseFollower):
         except Exception as e:
             logger.error(f"Failed to set emergency zero velocities: {e}")
 
-        # Reset target loss handler state if available
-        if self.target_loss_handler:
-            self.target_loss_handler.reset_state()
-
         self.log_follower_event("emergency_stop_triggered")
 
     def reset_emergency_stop(self) -> None:
@@ -1446,7 +1258,6 @@ class GMVelocityChaseFollower(BaseFollower):
 
         self.emergency_stop_active = True
         self.following_active = False
-        self.velocity_continuation_active = False
         self.altitude_recovery_in_progress = False
 
         # Zero all velocity commands immediately using coordinate frame-aware methods
@@ -1464,52 +1275,9 @@ class GMVelocityChaseFollower(BaseFollower):
         except Exception as e:
             logger.error(f"Failed to apply emergency velocity commands: {e}")
 
-        # Reset target loss handler
-        if self.target_loss_handler:
-            self.target_loss_handler.reset_state()
-
         # Log emergency event
         self.log_follower_event("emergency_stop", reason=reason,
                               timestamp=time.time(), safety_interventions=self.safety_interventions)
-
-    def trigger_return_to_launch(self, reason: str = "safety_timeout", altitude: float = None):
-        """Enhanced RTL with safety integration."""
-        if self.rtl_triggered:
-            logger.warning("RTL already in progress")
-            return False
-
-        rtl_altitude = altitude or self.config.get('TARGET_LOSS_HANDLING', {}).get('RTL_ALTITUDE', 50.0)
-
-        logger.warning(f"RTL triggered: {reason} (alt: {rtl_altitude}m)")
-
-        # Circuit breaker check
-        try:
-            from classes.circuit_breaker import FollowerCircuitBreaker
-            if FollowerCircuitBreaker.is_active():
-                FollowerCircuitBreaker.log_command_instead_of_execute(
-                    command_type="return_to_launch",
-                    follower_name=self.follower_name,
-                    reason=reason,
-                    rtl_altitude=rtl_altitude,
-                    safety_interventions=self.safety_interventions
-                )
-                logger.info("RTL blocked by circuit breaker - logged instead")
-                return False
-        except ImportError:
-            pass
-
-        # Execute RTL
-        try:
-            self.px4_controller.send_return_to_launch_command()
-            self.rtl_triggered = True
-            self.following_active = False
-
-            self.log_follower_event("rtl_triggered", reason=reason,
-                                  altitude=rtl_altitude, timestamp=time.time())
-            return True
-        except Exception as e:
-            logger.error(f"Failed to execute RTL: {e}")
-            return False
 
     def reset_safety_state(self) -> None:
         """Reset all safety-related state variables."""
@@ -1570,7 +1338,6 @@ class GMVelocityChaseFollower(BaseFollower):
                 'command_frame': self.COMMAND_FRAME,
                 'lateral_guidance_mode': self.active_lateral_mode
             },
-            'target_loss_handler': self.target_loss_handler.get_statistics() if self.target_loss_handler else {},
             'statistics': {
                 'total_follow_calls': self.total_follow_calls,
                 'successful_transformations': self.successful_transformations,
@@ -1589,8 +1356,7 @@ class GMVelocityChaseFollower(BaseFollower):
 
     def get_follower_telemetry(self) -> Dict[str, Any]:
         """
-        Override base telemetry to include gimbal-specific information,
-        target loss handling state, and safety system status.
+        Override base telemetry with gimbal and safety-system information.
         """
         # Get base telemetry from parent class
         telemetry = super().get_follower_telemetry()
@@ -1601,14 +1367,6 @@ class GMVelocityChaseFollower(BaseFollower):
             'gimbal_mount_type': self.mount_type,
             'command_frame': self.COMMAND_FRAME,
             'transformation_active': True,
-
-            # Target Loss Handler State
-            'target_loss_handler': {
-                'state': self.target_loss_handler.get_current_state() if self.target_loss_handler else 'UNAVAILABLE',
-                'timeout_remaining': self.target_loss_handler.get_timeout_remaining() if self.target_loss_handler else 0.0,
-                'velocity_continuation_active': self.target_loss_handler.is_continuing_velocity() if self.target_loss_handler else False,
-                'statistics': self.target_loss_handler.get_statistics() if self.target_loss_handler else {}
-            },
 
             # Safety System Status
             'safety_systems': {

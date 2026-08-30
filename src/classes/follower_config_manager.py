@@ -4,7 +4,7 @@ Follower Config Manager — Centralized Follower Operational Config
 =================================================================
 
 Provides a singleton FollowerConfigManager that centralizes follower
-operational parameters (update rates, smoothing, target loss, yaw smoothing,
+operational parameters (update rates, smoothing, yaw smoothing,
 lateral guidance). Mirrors the SafetyManager pattern.
 
 Project Information:

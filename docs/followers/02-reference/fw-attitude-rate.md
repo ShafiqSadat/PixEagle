@@ -69,8 +69,9 @@ FW_ATTITUDE_RATE:
   ENABLE_STALL_PROTECTION: true
 ```
 
-Angular-rate, altitude, target-loss, and emergency limits are owned by the
-central `Safety` and `Follower` sections. PID gains are owned by `PID_GAINS`.
+Angular-rate, altitude, and emergency limits are owned by the central
+`Safety` and `Follower` sections. Target-evidence authority is
+owned by `TargetContinuity`. PID gains are owned by `PID_GAINS`.
 Use [Configuration](../../CONFIGURATION.md) and the generated schema as the
 parameter authority.
 
@@ -81,12 +82,12 @@ Treat this profile as unaccepted until the exact airframe and PX4 release pass:
 1. command-preview sign and saturation tests
 2. deterministic software-in-loop target and telemetry traces
 3. PX4 SITL/HIL Offboard transition and loss tests
-4. airframe-specific stall, thrust, bank, and target-loss acceptance under an
+4. airframe-specific stall, thrust, bank, and authority-handoff acceptance under an
    approved test plan
 
 Prediction-only tracker output is not eligible for normal pursuit commands.
-The configured target-loss action takes over when a fresh measured target is
-unavailable.
+Fixed-wing attitude-rate continuity requests immediate handoff; live coasting is
+not qualified.
 
 ## References
 

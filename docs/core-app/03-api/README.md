@@ -511,8 +511,10 @@ diagnostics instead of parsing `/telemetry/follower_data`.
       "yawspeed_deg_s": 3.0
     }
   },
-  "target_loss_handler": {
-    "state": "ACTIVE"
+  "continuity": {
+    "authority_state": "ACTIVE",
+    "policy_mode": "immediate_handoff",
+    "reason_code": "fresh_identity_confirmed_measurement"
   },
   "safety_systems": {
     "safety_violations_count": 0

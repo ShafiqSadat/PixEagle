@@ -41,10 +41,10 @@ Safety:
 
 ## Per-Follower Overrides (Advanced Feature)
 
-Use `Safety.FollowerOverrides` when one profile needs tighter limits or a
-vehicle-appropriate target-loss action. To permit a larger operating envelope,
-raise `Safety.GlobalLimits` deliberately first; a follower override cannot
-bypass it.
+Use `Safety.FollowerOverrides` when one profile needs tighter limits.
+To permit a larger operating envelope, raise `Safety.GlobalLimits`
+deliberately first; a follower override cannot bypass it. Target-evidence
+authority is configured separately under `TargetContinuity`.
 
 ```yaml
 Safety:
@@ -57,7 +57,6 @@ Safety:
     FW_ATTITUDE_RATE:
       MIN_ALTITUDE: 30.0          # Higher floor for fixed-wing
       MAX_ALTITUDE: 100.0         # Lower than the global 120 m ceiling
-      TARGET_LOSS_ACTION: orbit   # Fixed-wing cannot hover
 ```
 
 **Important**:
@@ -67,8 +66,8 @@ Safety:
 - Maximum values and violation counts in an override must be less than or equal to global
 - `MIN_ALTITUDE` and `ALTITUDE_WARNING_BUFFER` must be greater than or equal to global
 - A globally enabled protection cannot be disabled by a follower override
-- `TARGET_LOSS_ACTION` normally inherits the global policy; the only built-in
-  substitution is fixed-wing `hover` to `orbit`
+- Target loss/recovery behavior is not a safety-limit override; see
+  [Target Continuity](target-continuity.md)
 
 ---
 
@@ -107,7 +106,6 @@ Safety:
     FW_ATTITUDE_RATE:
       MIN_ALTITUDE: 30.0
       MAX_ALTITUDE: 180.0
-      TARGET_LOSS_ACTION: orbit
 ```
 
 ---

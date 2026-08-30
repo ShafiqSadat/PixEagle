@@ -54,6 +54,15 @@ from classes.following_readiness import (
     get_configured_follower_execution_mode,
 )
 from classes.tracker_runtime_status import evaluate_tracker_command_freshness
+from classes.target_continuity import (
+    AirframePhase,
+    ContinuityContext,
+    ContinuityPolicy,
+    IdentityVerdict,
+    TargetContinuitySupervisor,
+    TargetEvidenceSnapshot,
+    TargetEvidenceState,
+)
 from classes.tracking_recovery import (
     RecoveryDetectionResult,
     RecoveryHint,
@@ -306,6 +315,14 @@ class AppController:
         self.tracker_trace_recorder = None
         self._tracker_trace_frame_index = 0
         self._offboard_trace_sequence = 0
+        continuity_policy = ContinuityPolicy.from_mapping(
+            getattr(Parameters, "TargetContinuity", {})
+        )
+        self.target_continuity = TargetContinuitySupervisor(continuity_policy)
+        self.target_continuity.reset_session(
+            session_epoch=self._tracking_session_generation,
+            reason="controller_initialized",
+        )
 
         # Thread safety lock for follower state management
         # Prevents race conditions when multiple API calls modify follower state
@@ -1645,6 +1662,12 @@ class AppController:
         """Invalidate asynchronous work associated with the previous target."""
         generation = int(getattr(self, "_tracking_session_generation", 0)) + 1
         self._tracking_session_generation = generation
+        supervisor = getattr(self, "target_continuity", None)
+        if supervisor is not None:
+            supervisor.reset_session(
+                session_epoch=generation,
+                reason="target_session_changed",
+            )
         return generation
 
     def _next_smart_selection_generation(self) -> int:
@@ -2734,6 +2757,36 @@ class AppController:
         self.following_execution_mode = PX4_EXECUTION_MODE
         self._active_following_controller = getattr(self, "px4_interface", None)
 
+    def _reset_target_continuity(self, reason: str) -> None:
+        """Reset the one command-authority state machine for this target epoch."""
+        self._get_target_continuity_supervisor().reset_session(
+            session_epoch=int(
+                getattr(self, "_tracking_session_generation", 0)
+            ),
+            reason=reason,
+        )
+
+    def _get_target_continuity_supervisor(self) -> TargetContinuitySupervisor:
+        """Return the supervisor, including for narrow test constructions."""
+        supervisor = getattr(self, "target_continuity", None)
+        if supervisor is None:
+            supervisor = TargetContinuitySupervisor(
+                ContinuityPolicy.from_mapping(
+                    getattr(Parameters, "TargetContinuity", None)
+                )
+            )
+            self.target_continuity = supervisor
+        return supervisor
+
+    def _refresh_target_continuity_policy(self) -> None:
+        """Publish current config before a new follow session starts."""
+        self.target_continuity = TargetContinuitySupervisor(
+            ContinuityPolicy.from_mapping(
+                getattr(Parameters, "TargetContinuity", None)
+            )
+        )
+        self._reset_target_continuity("follow_session_policy_loaded")
+
     def _get_command_preview_readiness(
         self,
         runtime_status: Optional[Dict[str, Any]] = None,
@@ -2856,6 +2909,7 @@ class AppController:
 
             try:
                 publication = await self._apply_pending_follower_config()
+                self._refresh_target_continuity_policy()
                 if publication["applied_count"]:
                     result["steps"].append(
                         "Applied pending follower configuration "
@@ -2888,6 +2942,7 @@ class AppController:
                     raise RuntimeError(
                         "Follower mode validation failed; command preview refused"
                     )
+                self._reset_target_continuity("command_preview_started")
                 result["steps"].append(
                     f"Follower created: {self.follower.get_display_name()}"
                 )
@@ -2958,6 +3013,22 @@ class AppController:
         result = {"steps": [], "errors": [], "auto_stopped": False}
         offboard_cleanup_required = False
 
+        configured_profile = Follower.get_mode_info(Parameters.FOLLOWER_MODE)
+        configured_phase = configured_profile.get("airframe_phase")
+        if configured_phase in {"fixed_wing", "vtol_transition"}:
+            message = (
+                f"Live {configured_phase} following is not qualified for the "
+                "current MAVSDK/PX4 integration; use COMMAND_PREVIEW"
+            )
+            result["precondition"] = {
+                "code": "continuity_profile_not_live_qualified",
+                "airframe_phase": configured_phase,
+                "reason": message,
+            }
+            result["errors"].append(message)
+            logging.warning("Follow start refused: %s", message)
+            return result
+
         # Use lock to prevent race conditions during state changes
         async with self._follower_state_lock:
             circuit_state = FollowerCircuitBreaker.get_activation_state()
@@ -3008,6 +3079,7 @@ class AppController:
                 logging.info("Activating Follow Mode to PX4!")
 
                 publication = await self._apply_pending_follower_config()
+                self._refresh_target_continuity_policy()
                 if publication["applied_count"]:
                     result["steps"].append(
                         "Applied pending follower configuration "
@@ -3067,6 +3139,8 @@ class AppController:
                         raise RuntimeError(
                             "Follower mode validation failed; Offboard start refused"
                         )
+
+                    self._reset_target_continuity("px4_follow_started")
 
                     result["steps"].append(f"Follower created: {self.follower.get_display_name()}")
 
@@ -3247,6 +3321,7 @@ class AppController:
         *,
         commander_publish_final: bool = True,
         attempt_offboard_stop: bool = True,
+        reset_continuity: bool = True,
     ) -> Dict[str, any]:
         """
         Internal method for PX4 disconnection without acquiring lock.
@@ -3264,6 +3339,8 @@ class AppController:
         if not self.following_active and not has_runtime_components:
             result["steps"].append("Follow mode is not active.")
             self._reset_following_execution_state()
+            if reset_continuity:
+                self._reset_target_continuity("follow_session_stopped")
             return result
 
         try:
@@ -3399,6 +3476,8 @@ class AppController:
 
         # Keep the next start fail-closed even if one cleanup step raised.
         self._reset_following_execution_state()
+        if reset_continuity:
+            self._reset_target_continuity("follow_session_stopped")
 
         return result
 
@@ -3908,6 +3987,7 @@ class AppController:
             return {
                 "status": "rejected",
                 "accepted": False,
+                "dispatch_accepted": False,
                 "reason": "following_not_active",
                 "following_active": False,
                 "injection": {
@@ -3918,12 +3998,15 @@ class AppController:
                 },
                 "command_intent": None,
                 "offboard_commander": None,
+                "continuity": None,
                 "timestamp": time.time(),
             }
 
         processed_output = self._apply_command_freshness_contract(tracker_output)
-        accepted = await self._dispatch_tracker_output_to_follower(processed_output)
-        intent = self._get_current_command_intent()
+        dispatch_accepted = await self._dispatch_tracker_output_to_follower(
+            processed_output
+        )
+        intent = self._get_current_command_intent() if dispatch_accepted else None
         commander = getattr(self, "offboard_commander", None)
         commander_status = (
             commander.get_status()
@@ -3937,9 +4020,10 @@ class AppController:
         raw_data = processed_output.raw_data or {}
         metadata = processed_output.metadata or {}
         return {
-            "status": "accepted" if accepted else "rejected",
-            "accepted": bool(accepted),
-            "reason": None if accepted else "dispatch_rejected",
+            "status": "accepted",
+            "accepted": True,
+            "dispatch_accepted": bool(dispatch_accepted),
+            "reason": None,
             "following_active": bool(getattr(self, "following_active", False)),
             "injection": {
                 "source": source,
@@ -3966,6 +4050,7 @@ class AppController:
             },
             "command_intent": dataclasses.asdict(intent) if intent else None,
             "offboard_commander": commander_summary,
+            "continuity": self.get_target_continuity_status(),
             "timestamp": time.time(),
         }
 
@@ -4120,6 +4205,7 @@ class AppController:
             return {
                 "status": "rejected",
                 "accepted": False,
+                "dispatch_accepted": False,
                 "reason": "following_not_active",
                 "following_active": False,
                 "injection": {
@@ -4129,11 +4215,18 @@ class AppController:
                 },
                 "command_intent": None,
                 "offboard_commander": None,
+                "continuity": None,
                 "timestamp": time.time(),
             }
 
-        accepted = await self.handle_video_frame_unavailable(normalized_frame_status)
-        intent = self._get_current_command_intent()
+        await self.handle_video_frame_unavailable(normalized_frame_status)
+        continuity_status = self.get_target_continuity_status()
+        dispatch_accepted = continuity_status.get("authority_state") in {
+            "ACTIVE",
+            "COASTING",
+            "REACQUIRING",
+        }
+        intent = self._get_current_command_intent() if dispatch_accepted else None
         commander = getattr(self, "offboard_commander", None)
         commander_status = (
             commander.get_status()
@@ -4142,9 +4235,10 @@ class AppController:
         )
 
         return {
-            "status": "accepted" if accepted else "rejected",
-            "accepted": bool(accepted),
-            "reason": None if accepted else "dispatch_rejected",
+            "status": "accepted",
+            "accepted": True,
+            "dispatch_accepted": bool(dispatch_accepted),
+            "reason": None,
             "following_active": bool(getattr(self, "following_active", False)),
             "injection": {
                 "source": source,
@@ -4155,6 +4249,7 @@ class AppController:
             "offboard_commander": self._summarize_offboard_commander_for_validation(
                 commander_status
             ),
+            "continuity": continuity_status,
             "timestamp": time.time(),
         }
 
@@ -4622,98 +4717,216 @@ class AppController:
         self,
         tracker_output: TrackerOutput,
     ) -> bool:
-        """
-        Process a vetted TrackerOutput through follower math and PX4 dispatch.
-
-        The input may be an inactive fail-closed output produced by target-loss,
-        stale-frame, or prediction-only freshness checks.
-        """
+        """Authorize one tracker update at the command-publication boundary."""
         if not tracker_output:
             return False
 
-        # Inactive output is rejected by default no matter what a legacy or
-        # custom compatibility validator returns. Followers must explicitly opt
-        # in when inactive output is needed to publish stop/hover/orbit commands.
-        if not tracker_output.tracking_active:
-            if not self._should_route_inactive_output_to_follower(tracker_output):
-                logging.warning(
-                    "Inactive tracker output rejected because active follower "
-                    "did not opt into fail-closed command handling"
+        evidence = TargetEvidenceSnapshot.from_tracker_output(
+            tracker_output,
+            session_epoch=int(
+                getattr(self, "_tracking_session_generation", 0)
+            ),
+        )
+        nominal_intent: Optional[CommandIntent] = None
+
+        if evidence.state is TargetEvidenceState.CONFIRMED:
+            if not self.validate_tracker_follower_compatibility(tracker_output):
+                evidence = dataclasses.replace(
+                    evidence,
+                    state=TargetEvidenceState.UNCERTAIN,
+                    identity_verdict=IdentityVerdict.UNCONFIRMED,
+                    reason_code="tracker_follower_incompatible",
                 )
-                self._record_tracker_dispatch_trace(
-                    tracker_output=tracker_output,
-                    command_intent=None,
-                    dispatch_accepted=False,
-                )
-                self._activate_offboard_commander_failsafe_defaults(
-                    "inactive_tracker_output_rejected"
-                )
-                return False
-            logging.warning(
-                "Routing inactive tracker output to follower for "
-                "fail-closed command handling"
+            else:
+                try:
+                    follow_result = self.follower.follow_target(tracker_output)
+                    if follow_result is False:
+                        evidence = dataclasses.replace(
+                            evidence,
+                            state=TargetEvidenceState.UNCERTAIN,
+                            identity_verdict=IdentityVerdict.UNCONFIRMED,
+                            reason_code="follower_rejected_measurement",
+                        )
+                    else:
+                        nominal_intent = self._get_current_command_intent()
+                        if nominal_intent is None:
+                            evidence = dataclasses.replace(
+                                evidence,
+                                state=TargetEvidenceState.UNCERTAIN,
+                                identity_verdict=IdentityVerdict.UNCONFIRMED,
+                                reason_code="follower_intent_missing",
+                            )
+                except Exception as exc:
+                    logging.exception("Follower command calculation failed: %s", exc)
+                    evidence = dataclasses.replace(
+                        evidence,
+                        state=TargetEvidenceState.UNCERTAIN,
+                        identity_verdict=IdentityVerdict.UNCONFIRMED,
+                        reason_code="follower_exception",
+                    )
+
+        try:
+            decision = self._get_target_continuity_supervisor().evaluate(
+                evidence,
+                self._build_target_continuity_context(),
+                nominal_intent,
             )
-        elif not self.validate_tracker_follower_compatibility(tracker_output):
-            logging.warning("Current tracker incompatible with active follower")
+        except Exception as exc:
+            logging.exception("Target continuity evaluation failed: %s", exc)
             self._record_tracker_dispatch_trace(
                 tracker_output=tracker_output,
                 command_intent=None,
                 dispatch_accepted=False,
             )
-            self._activate_offboard_commander_failsafe_defaults(
-                "tracker_follower_incompatible"
+            await self._stop_following_after_continuity_failure(
+                "target_continuity_evaluation_failed"
             )
             return False
 
-        # SYNCHRONOUS: Calculate and set commands using structured data.
-        try:
-            logging.debug(
-                "Calling follower.follow_target() with tracker_output: "
-                "data_type=%s, tracking_active=%s",
-                tracker_output.data_type,
-                tracker_output.tracking_active,
+        if decision.handoff_request is not None:
+            self._record_tracker_dispatch_trace(
+                tracker_output=tracker_output,
+                command_intent=None,
+                dispatch_accepted=False,
             )
-            follow_result = self.follower.follow_target(tracker_output)
-            logging.debug(f"Follower result: follow_target returned {follow_result}")
+            await self._execute_target_continuity_handoff(decision.reason_code)
+            return False
 
-            if hasattr(self.follower, 'setpoint_handler'):
-                setpoints = self.follower.setpoint_handler.get_fields()
-                logging.debug(f"Setpoints after follower: {setpoints}")
-
-            if follow_result is False:
-                logging.debug("Follower follow_target returned False")
-                self._activate_offboard_commander_failsafe_defaults(
-                    "follower_rejected_tracker_output"
-                )
-                self._record_tracker_dispatch_trace(
-                    tracker_output=tracker_output,
-                    command_intent=self._get_current_command_intent(),
-                    dispatch_accepted=False,
-                )
-                return False
-        except Exception as e:
-            logging.error(f"Error in follower.follow_target: {e}")
-            self._activate_offboard_commander_failsafe_defaults(
-                "follower_exception"
+        intent = decision.authorized_intent
+        if intent is None:
+            logging.error(
+                "Target continuity returned no intent and no handoff request"
             )
             self._record_tracker_dispatch_trace(
                 tracker_output=tracker_output,
-                command_intent=self._get_current_command_intent(),
+                command_intent=None,
                 dispatch_accepted=False,
+            )
+            await self._stop_following_after_continuity_failure(
+                "target_continuity_empty_decision"
             )
             return False
 
-        # ASYNCHRONOUS: Hand the accepted command intent to the commander.
-        # The commander owns fixed-rate MAVSDK publication; this frame/tracker
-        # path must not be the PX4 heartbeat.
-        intent = self._get_current_command_intent()
-        accepted = self._submit_current_command_intent_to_commander()
+        accepted = self._submit_command_intent_to_commander(intent)
         self._record_tracker_dispatch_trace(
             tracker_output=tracker_output,
             command_intent=intent,
             dispatch_accepted=accepted,
         )
+        if not accepted:
+            await self._stop_following_after_continuity_failure(
+                "continuity_intent_submission_failed"
+            )
         return accepted
+
+    def _build_target_continuity_context(self) -> ContinuityContext:
+        """Snapshot vehicle and publisher prerequisites without flight policy."""
+        follower = getattr(self, "follower", None)
+        control_type = "unknown"
+        phase = AirframePhase.UNKNOWN
+        if follower is not None:
+            control_type = str(follower.get_control_type())
+            try:
+                phase = AirframePhase(str(follower.get_airframe_phase()))
+            except ValueError:
+                phase = AirframePhase.UNKNOWN
+
+        commander = getattr(self, "offboard_commander", None)
+        commander_status = (
+            commander.get_status()
+            if commander is not None and hasattr(commander, "get_status")
+            else {}
+        )
+        publisher_healthy = bool(
+            commander_status.get("running")
+            and commander_status.get("task_active")
+            and not commander_status.get("failure_policy_triggered")
+            and not commander_status.get("terminal_failure")
+        )
+
+        preview = self._is_command_preview_session()
+        controller = getattr(self, "_active_following_controller", None)
+        yaw = getattr(controller, "current_yaw", None)
+        if preview:
+            vehicle_state_fresh = True
+            offboard_active = True
+        else:
+            ready = getattr(self.px4_interface, "is_command_connection_ready", None)
+            vehicle_state_fresh = bool(
+                callable(ready) and ready(require_fresh_telemetry=True)
+            )
+            offboard_active = bool(
+                getattr(self.px4_interface, "active_mode", False)
+            )
+
+        return ContinuityContext(
+            execution_mode=(
+                COMMAND_PREVIEW_EXECUTION_MODE if preview else PX4_EXECUTION_MODE
+            ),
+            airframe_phase=phase,
+            control_type=control_type,
+            vehicle_state_fresh=vehicle_state_fresh,
+            offboard_active=offboard_active,
+            publisher_healthy=publisher_healthy,
+            vehicle_yaw_deg=(None if yaw is None else float(yaw)),
+        )
+
+    async def _execute_target_continuity_handoff(self, reason: str) -> None:
+        """Stop command publication and record the observed handoff outcome."""
+        preview = self._is_command_preview_session()
+        async with self._follower_state_lock:
+            result = await self._disconnect_px4_internal(
+                commander_publish_final=False,
+                attempt_offboard_stop=not preview,
+                reset_continuity=False,
+            )
+
+        offboard_action = result.get("offboard_stop_action") or {}
+        success = not result.get("errors") and (
+            preview or offboard_action.get("executed") is True
+        )
+        detail = (
+            "command_preview_stopped"
+            if preview and success
+            else "px4_offboard_stop_confirmed"
+            if success
+            else "; ".join(result.get("errors") or ["handoff_not_confirmed"])
+        )
+        self._get_target_continuity_supervisor().record_handoff_result(
+            success=success,
+            detail=detail,
+        )
+        log = logging.info if success else logging.error
+        log("Target continuity handoff (%s): %s", reason, detail)
+
+    async def _stop_following_after_continuity_failure(self, reason: str) -> None:
+        """Fail closed if the authority supervisor itself cannot decide."""
+        preview = self._is_command_preview_session()
+        async with self._follower_state_lock:
+            result = await self._disconnect_px4_internal(
+                commander_publish_final=False,
+                attempt_offboard_stop=not preview,
+                reset_continuity=False,
+            )
+        offboard_action = result.get("offboard_stop_action") or {}
+        success = not result.get("errors") and (
+            preview or offboard_action.get("executed") is True
+        )
+        outcome = (
+            "command_preview_stopped"
+            if preview and success
+            else "px4_offboard_stop_confirmed"
+            if success
+            else "; ".join(result.get("errors") or ["handoff_not_confirmed"])
+        )
+        self._get_target_continuity_supervisor().record_handoff_result(
+            success=success,
+            detail=f"{reason}: {outcome}",
+        )
+
+    def get_target_continuity_status(self) -> Dict[str, Any]:
+        """Return bounded supervisor state for API and operator diagnostics."""
+        return self._get_target_continuity_supervisor().get_status()
 
     def _get_current_command_intent(self) -> Optional[CommandIntent]:
         """Return the latest command intent from the active follower manager."""
@@ -4736,6 +4949,17 @@ class AppController:
 
     def _submit_current_command_intent_to_commander(self) -> bool:
         """Submit the latest follower command intent to the Offboard commander."""
+        intent = self._get_current_command_intent()
+        if intent is None:
+            logging.error(
+                "Follower reported success but no CommandIntent was available "
+                "for OffboardCommander publication"
+            )
+            return False
+        return self._submit_command_intent_to_commander(intent)
+
+    def _submit_command_intent_to_commander(self, intent: CommandIntent) -> bool:
+        """Submit the supervisor-authorized immutable command snapshot."""
         commander = getattr(self, 'offboard_commander', None)
         if commander is None:
             logging.error(
@@ -4744,31 +4968,14 @@ class AppController:
             )
             return False
 
-        intent = self._get_current_command_intent()
-        if intent is None:
-            logging.error(
-                "Follower reported success but no CommandIntent was available "
-                "for OffboardCommander publication"
-            )
-            self._activate_offboard_commander_failsafe_defaults(
-                "follower_intent_missing"
-            )
-            return False
-
         try:
             accepted = commander.submit_intent(intent)
         except Exception as e:
             logging.error(f"OffboardCommander rejected command intent with exception: {e}")
-            self._activate_offboard_commander_failsafe_defaults(
-                "commander_intent_exception"
-            )
             return False
 
         if not accepted:
             logging.error("OffboardCommander rejected command intent")
-            self._activate_offboard_commander_failsafe_defaults(
-                "commander_intent_rejected"
-            )
             return False
 
         logging.debug(
@@ -5162,28 +5369,6 @@ class AppController:
                 
         except Exception as e:
             logging.error(f"Error validating tracker-follower compatibility: {e}")
-            return False
-
-    def _should_route_inactive_output_to_follower(self, tracker_output: TrackerOutput) -> bool:
-        """
-        Return True when a follower explicitly accepts inactive tracker output.
-
-        This is used for fail-closed external input handling, where skipping the
-        follower would also skip the zero command that needs to be dispatched to
-        PX4. Followers opt in case-by-case; inactive output remains rejected by
-        default.
-        """
-        if not tracker_output or tracker_output.tracking_active or not self.follower:
-            return False
-
-        handler = getattr(self.follower, 'should_process_inactive_tracker_output', None)
-        if not callable(handler):
-            return False
-
-        try:
-            return bool(handler(tracker_output))
-        except Exception as e:
-            logging.error(f"Error checking inactive tracker output handling: {e}")
             return False
 
     def _apply_command_freshness_contract(self, tracker_output: TrackerOutput) -> TrackerOutput:

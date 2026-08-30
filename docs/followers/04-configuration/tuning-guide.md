@@ -261,7 +261,7 @@ Safety:
 ### Moving Target (Erratic)
 
 1. Target changes direction frequently
-2. Test target loss handling
+2. Test target-evidence loss and continuity handoff
 3. Verify safety limits
 
 ### Altitude Changes

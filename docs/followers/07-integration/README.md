@@ -36,7 +36,13 @@ This section covers how followers integrate with the PixEagle ecosystem.
 │                          FOLLOWER                                 │
 │                    (MC/FW/GM Follower)                           │
 │                                                                  │
-│  TrackerOutput → Control Algorithm → SetpointHandler             │
+│  Confirmed TrackerOutput → Control Algorithm → CommandIntent     │
+└─────────────────────────────┬────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                  TARGET CONTINUITY SUPERVISOR                    │
+│          Evidence authority, bounded recovery, handoff           │
 └─────────────────────────────┬────────────────────────────────────┘
                               │
                               ▼

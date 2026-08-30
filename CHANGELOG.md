@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Replace follower-specific target-loss timers and command behaviors with one
+  `TargetContinuitySupervisor` between nominal follower intents and the
+  Offboard publisher. Unusable or identity-ambiguous evidence can no longer
+  enter follower command math; the default requests an observed Hold handoff.
+- Add schema-backed continuity states, typed API/dashboard diagnostics, and a
+  follower-independent capability registry keyed by airframe phase and control
+  type. Bounded horizontal decay and guarded restoration are available only in
+  command preview; live PX4, attitude-rate, fixed-wing, and VTOL-transition
+  coasting remain fail-closed and unqualified.
+- Retire legacy target-loss config and follower hooks through the config
+  migration registry, require `airframe_phase` in follower command schema
+  `2.1.0`, and update validation injections to distinguish accepted stimuli
+  from rejected command dispatch and confirmed handoff outcomes.
 - Separate the CSRT-family short-term appearance mismatch floor from the
   stricter detector-reacquisition identity gate. Moderate scene transitions no
   longer become false CSRT losses solely because they fall below the recovery

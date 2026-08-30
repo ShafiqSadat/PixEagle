@@ -35,7 +35,6 @@ from pydantic import (
 )
 
 from classes.follower_types import FollowerType
-from classes.safety_types import is_target_loss_override_compatible
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +64,6 @@ AltitudeWarningBuffer = Annotated[
     Field(strict=True, ge=0, le=100.0, allow_inf_nan=False),
 ]
 SafetyViolationLimit = Annotated[StrictInt, Field(gt=0, le=1000)]
-TargetLossPolicy = Literal["hover", "orbit", "stop", "rtl", "continue"]
 
 _MAXIMUM_ENVELOPE_FIELDS = frozenset(
     {
@@ -111,7 +109,6 @@ class GlobalLimitsModel(BaseModel):
     MAX_ROLL_RATE: RateLimit
     EMERGENCY_STOP_ENABLED: StrictBool
     RTL_ON_VIOLATION: StrictBool
-    TARGET_LOSS_ACTION: TargetLossPolicy
     MAX_SAFETY_VIOLATIONS: SafetyViolationLimit
 
     model_config = ConfigDict(extra="forbid")
@@ -146,7 +143,6 @@ class SafetyLimitOverrideModel(BaseModel):
     MAX_ROLL_RATE: Optional[RateLimit] = None
     EMERGENCY_STOP_ENABLED: Optional[StrictBool] = None
     RTL_ON_VIOLATION: Optional[StrictBool] = None
-    TARGET_LOSS_ACTION: Optional[TargetLossPolicy] = None
     MAX_SAFETY_VIOLATIONS: Optional[SafetyViolationLimit] = None
 
     model_config = ConfigDict(extra="forbid")
@@ -198,13 +194,6 @@ class SafetySectionModel(BaseModel):
                     field_name in _PROTECTION_ENABLE_FIELDS
                     and global_value is True
                     and override_value is False
-                ) or (
-                    field_name == "TARGET_LOSS_ACTION"
-                    and not is_target_loss_override_compatible(
-                        follower_name,
-                        global_value,
-                        override_value,
-                    )
                 )
                 if weakens:
                     weakening_fields.append(

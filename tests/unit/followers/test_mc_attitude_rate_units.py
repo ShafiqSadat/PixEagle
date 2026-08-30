@@ -63,7 +63,6 @@ def test_command_boundary_converts_internal_rates_to_degrees_once():
     follower = _bare_follower()
     follower.extract_target_coordinates = MagicMock(return_value=(0.1, -0.2))
     follower._update_pid_gains = MagicMock()
-    follower._handle_target_loss = MagicMock(return_value=True)
     follower.px4_controller = SimpleNamespace(
         current_altitude=20.0,
         current_pitch=0.0,

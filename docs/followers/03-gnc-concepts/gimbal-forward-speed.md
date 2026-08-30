@@ -38,5 +38,5 @@ fields.
 The local contract proves mode selection, sign/unit handling, and bounded ramp
 math. It does not prove pursuit performance. Before enabling PX4 publication,
 validate the exact camera, gimbal signs, airframe, speed/acceleration limits,
-target-loss response, and operator abort path in command preview and PX4-in-loop
+continuity handoff, and operator abort path in command preview and PX4-in-loop
 tests.

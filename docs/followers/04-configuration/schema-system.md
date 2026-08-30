@@ -15,7 +15,7 @@ engaged live command contract is blocked until following is stopped.
 ## Schema Structure
 
 ```yaml
-schema_version: "2.0.0"
+schema_version: "2.1.0"
 
 # Field definitions
 command_fields:
@@ -28,6 +28,7 @@ command_fields:
 # Profile definitions
 follower_profiles:
   mc_velocity_chase:
+    airframe_phase: multicopter
     display_name: "MC Velocity Chase"
     control_type: "velocity_body_offboard"
     required_fields: [...]

@@ -50,8 +50,6 @@ def config_with_general():
                 'CONTROL_UPDATE_RATE': 20.0,
                 'COMMAND_SMOOTHING_ENABLED': True,
                 'SMOOTHING_FACTOR': 0.8,
-                'TARGET_LOSS_TIMEOUT': 3.0,
-                'TARGET_LOSS_COORDINATE_THRESHOLD': 1.5,
                 'LATERAL_GUIDANCE_MODE': 'coordinated_turn',
                 'ENABLE_AUTO_MODE_SWITCHING': False,
                 'GUIDANCE_MODE_SWITCH_VELOCITY': 3.0,
@@ -72,12 +70,11 @@ def config_with_general():
             },
             'FollowerOverrides': {
                 'MC_VELOCITY_CHASE': {
-                    'TARGET_LOSS_TIMEOUT': 2.0,
+                    'CONTROL_UPDATE_RATE': 25.0,
                 },
                 'MC_ATTITUDE_RATE': {
                     'CONTROL_UPDATE_RATE': 50.0,
                     'SMOOTHING_FACTOR': 0.85,
-                    'TARGET_LOSS_TIMEOUT': 2.0,
                 },
                 'FW_ATTITUDE_RATE': {
                     'SMOOTHING_FACTOR': 0.85,
@@ -134,7 +131,6 @@ class TestConfigurationLoading:
         fcm.load_from_config(config_with_general)
 
         assert fcm.get_param('CONTROL_UPDATE_RATE') == 20.0
-        assert fcm.get_param('TARGET_LOSS_TIMEOUT') == 3.0
         assert fcm.get_param('SMOOTHING_FACTOR') == 0.8
 
     def test_load_follower_overrides(self, fcm, config_with_general):
@@ -198,8 +194,8 @@ class TestResolutionHierarchy:
         """Follower-specific override takes precedence over General."""
         fcm.load_from_config(config_with_general)
 
-        result = fcm.get_param('TARGET_LOSS_TIMEOUT', 'MC_VELOCITY_CHASE')
-        assert result == 2.0  # Override value, not General 3.0
+        result = fcm.get_param('CONTROL_UPDATE_RATE', 'MC_VELOCITY_CHASE')
+        assert result == 25.0  # Override value, not General 20.0
 
     def test_general_used_when_no_override(self, fcm, config_with_general):
         """General value used when no follower override exists."""
@@ -221,27 +217,25 @@ class TestResolutionHierarchy:
         fcm.load_from_config(config_with_general)
 
         # Config has 'MC_VELOCITY_CHASE' (uppercase)
-        result_lower = fcm.get_param('TARGET_LOSS_TIMEOUT', 'mc_velocity_chase')
-        assert result_lower == 2.0
+        result_lower = fcm.get_param('CONTROL_UPDATE_RATE', 'mc_velocity_chase')
+        assert result_lower == 25.0
 
-        result_upper = fcm.get_param('TARGET_LOSS_TIMEOUT', 'MC_VELOCITY_CHASE')
-        assert result_upper == 2.0
+        result_upper = fcm.get_param('CONTROL_UPDATE_RATE', 'MC_VELOCITY_CHASE')
+        assert result_upper == 25.0
 
-        result_mixed = fcm.get_param('TARGET_LOSS_TIMEOUT', 'Mc_Velocity_Chase')
-        assert result_mixed == 2.0
+        result_mixed = fcm.get_param('CONTROL_UPDATE_RATE', 'Mc_Velocity_Chase')
+        assert result_mixed == 25.0
 
     def test_multiple_overrides_independent(self, fcm, config_with_general):
         """Different followers get their own override values."""
         fcm.load_from_config(config_with_general)
 
-        # MC_VELOCITY_CHASE: timeout=2.0
-        assert fcm.get_param('TARGET_LOSS_TIMEOUT', 'MC_VELOCITY_CHASE') == 2.0
-        # MC_ATTITUDE_RATE: timeout=2.0, rate=50.0
-        assert fcm.get_param('TARGET_LOSS_TIMEOUT', 'MC_ATTITUDE_RATE') == 2.0
+        # MC_VELOCITY_CHASE and MC_ATTITUDE_RATE have independent rates.
+        assert fcm.get_param('CONTROL_UPDATE_RATE', 'MC_VELOCITY_CHASE') == 25.0
         assert fcm.get_param('CONTROL_UPDATE_RATE', 'MC_ATTITUDE_RATE') == 50.0
-        # FW_ATTITUDE_RATE: smoothing=0.85, timeout=General(3.0)
+        # FW_ATTITUDE_RATE overrides smoothing but inherits the general rate.
         assert fcm.get_param('SMOOTHING_FACTOR', 'FW_ATTITUDE_RATE') == 0.85
-        assert fcm.get_param('TARGET_LOSS_TIMEOUT', 'FW_ATTITUDE_RATE') == 3.0
+        assert fcm.get_param('CONTROL_UPDATE_RATE', 'FW_ATTITUDE_RATE') == 20.0
 
     def test_unknown_param_raises(self, fcm, config_with_general):
         """Unknown operational parameters fail closed."""
@@ -335,7 +329,7 @@ class TestCaching:
 
         # Second call should hit cache
         val2 = fcm.get_param('CONTROL_UPDATE_RATE', 'MC_VELOCITY_CHASE')
-        assert val2 == 20.0
+        assert val2 == 25.0
 
     def test_clear_cache_resets_cache(self, fcm, config_with_general):
         """clear_cache clears the cache."""
@@ -576,11 +570,11 @@ class TestDebugSummary:
         summary = fcm.get_all_config_summary()
         summary['general']['YAW_SMOOTHING']['ENABLED'] = False
         summary['follower_overrides']['MC_VELOCITY_CHASE'][
-            'TARGET_LOSS_TIMEOUT'
+            'CONTROL_UPDATE_RATE'
         ] = -1
 
         assert fcm.get_yaw_smoothing_config()['ENABLED'] is True
         assert fcm.get_param(
-            'TARGET_LOSS_TIMEOUT',
+            'CONTROL_UPDATE_RATE',
             'MC_VELOCITY_CHASE',
-        ) == 2.0
+        ) == 25.0

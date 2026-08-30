@@ -10,7 +10,7 @@ below so the generator can extract metadata for the dashboard UI.
 
 ### Options dropdown (pipe-separated — recommended)
 ```yaml
-TARGET_LOSS_ACTION: hover  # Options: hover | orbit | stop | rtl | continue
+MODE: immediate_handoff  # Options: immediate_handoff | bounded_decay
 MOUNT_TYPE: HORIZONTAL     # Options: HORIZONTAL | VERTICAL
 ```
 

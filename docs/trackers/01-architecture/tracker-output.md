@@ -189,7 +189,7 @@ a follower. Every tracker that can feed command math must explicitly publish:
 - `data_is_stale=True` and `usable_for_following=False` for cached data;
 - `prediction_only=True` and `usable_for_following=False` for estimator-only
   coasting;
-- a stable `freshness_reason` for logs and target-loss handling.
+- a stable `freshness_reason` for logs and continuity decisions.
 
 The canonical evaluator is
 `classes.tracker_runtime_status.evaluate_tracker_command_freshness()`. It

@@ -13,6 +13,7 @@ tighter per-follower limits, and runtime enforcement.
 |----------|-------------|
 | [SafetyManager](safety-manager.md) | Centralized limits manager |
 | [Limits Configuration](limits-configuration.md) | Configuring safety limits |
+| [Target Continuity](target-continuity.md) | Shared target-evidence command authority and handoff |
 
 ---
 

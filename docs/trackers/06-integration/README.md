@@ -50,9 +50,9 @@ tracker output before follower dispatch when:
 - tracker metadata sets `usable_for_following: false`.
 
 These cases may still be visible in telemetry and overlays, but they are not
-treated as active command targets. Followers that can safely respond to inactive
-output must opt in and publish explicit target-loss commands. External trackers
-are allowed to bypass video-frame freshness only when they explicitly publish
+treated as active command targets. They bypass follower command calculation and
+enter the shared target-continuity authority policy. External trackers are
+allowed to bypass video-frame freshness only when they explicitly publish
 capabilities with `requires_video: false`; absent capabilities default to
 vision-dependent fail-closed behavior.
 

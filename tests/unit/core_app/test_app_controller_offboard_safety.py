@@ -234,9 +234,9 @@ def _visible_multi_target_output() -> TrackerOutput:
 def _follower_manager_stub(control_type='velocity_body_offboard'):
     follower = MagicMock()
     follower.validate_tracker_compatibility.return_value = True
-    follower.should_process_inactive_tracker_output.return_value = False
     follower.follow_target.return_value = True
     follower.get_control_type.return_value = control_type
+    follower.get_airframe_phase.return_value = 'multicopter'
     follower.get_last_command_intent.return_value = _command_intent(control_type=control_type)
     follower.get_display_name.return_value = 'GM Velocity Vector'
     follower.get_available_fields.return_value = [
@@ -278,14 +278,27 @@ def _command_intent(control_type='velocity_body_offboard', fields=None):
 def _commander_stub(accepted=True):
     return SimpleNamespace(
         submit_intent=MagicMock(return_value=accepted),
+        stop=AsyncMock(return_value=True),
         get_status=MagicMock(return_value={
             'exists': True,
             'running': True,
+            'task_active': True,
             'health_state': 'running',
             'sends_mavsdk_commands': True,
             'command_publication_source': 'offboard_commander',
         }),
     )
+
+
+def _prepare_dispatch_controller(ctrl):
+    """Complete the lifecycle fields required by the authority boundary."""
+    ctrl._follower_state_lock = asyncio.Lock()
+    ctrl._tracking_session_generation = 0
+    ctrl.following_execution_mode = 'COMMAND_PREVIEW'
+    ctrl._active_following_controller = SimpleNamespace(current_yaw=0.0)
+    ctrl.setpoint_sender = None
+    ctrl.telemetry_handler = SimpleNamespace(follower=getattr(ctrl, 'follower', None))
+    return ctrl
 
 
 def _assert_no_frame_loop_px4_send(ctrl):
@@ -433,8 +446,7 @@ def _minimal_update_loop_controller(frame):
     ctrl.is_smart_override_active = MagicMock(return_value=False)
     ctrl.follower = _follower_manager_stub(control_type='attitude_rate')
     ctrl.follower.validate_tracker_compatibility.side_effect = lambda output: output.tracking_active
-    ctrl.follower.should_process_inactive_tracker_output.side_effect = lambda output: not output.tracking_active
-    return ctrl
+    return _prepare_dispatch_controller(ctrl)
 
 
 @pytest.mark.asyncio
@@ -535,7 +547,7 @@ def test_segmentation_click_initializer_failure_clears_tracking_state():
 
 @pytest.mark.asyncio
 async def test_update_loop_first_classic_tracker_failure_dispatches_unusable_output():
-    """First failed classic tracker update must not leave the last PX4 command alive."""
+    """First failed classic update must request handoff without invoking a follower."""
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
     ctrl = _minimal_update_loop_controller(frame)
     ctrl.tracker = SimpleNamespace(
@@ -544,6 +556,7 @@ async def test_update_loop_first_classic_tracker_failure_dispatches_unusable_out
         get_output=MagicMock(return_value=_active_position_output()),
         position_estimator=None,
     )
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     with patch('classes.app_controller.Parameters.ENABLE_PREPROCESSING', False), \
             patch('classes.app_controller.Parameters.ENABLE_DEBUGGING', False), \
@@ -553,11 +566,11 @@ async def test_update_loop_first_classic_tracker_failure_dispatches_unusable_out
 
     ctrl.tracker.update.assert_called_once_with(frame)
     assert ctrl.tracking_failure_start_time is not None
-    passed_output = ctrl.follower.follow_target.call_args.args[0]
-    assert passed_output.tracking_active is False
-    assert passed_output.raw_data['usable_for_following'] is False
-    assert passed_output.raw_data['freshness_reason'] == 'classic_tracker_update_failed'
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    ctrl.follower.follow_target.assert_not_called()
+    ctrl.offboard_commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'classic_tracker_update_failed'
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
@@ -1045,7 +1058,7 @@ def test_classic_tracker_freshness_uses_the_output_from_the_same_update():
 
 @pytest.mark.asyncio
 async def test_update_loop_dispatches_failed_always_reporting_tracker_output():
-    """Failed always-reporting updates with inactive output must still publish safe commands."""
+    """Failed external updates request handoff without follower-local stop commands."""
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
     ctrl = _minimal_update_loop_controller(frame)
     tracker_output = _stale_gimbal_output()
@@ -1057,6 +1070,7 @@ async def test_update_loop_dispatches_failed_always_reporting_tracker_output():
         update=MagicMock(return_value=(False, tracker_output)),
         draw_tracking=MagicMock(return_value=frame),
     )
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     with patch('classes.app_controller.Parameters.ENABLE_PREPROCESSING', False), \
             patch('classes.app_controller.Parameters.STREAM_PROCESSED_OSD', False), \
@@ -1065,11 +1079,11 @@ async def test_update_loop_dispatches_failed_always_reporting_tracker_output():
 
     ctrl.tracker.update.assert_called_once_with(frame)
     assert ctrl.tracker.draw_tracking.call_args.kwargs['tracking_successful'] is False
-    passed_output = ctrl.follower.follow_target.call_args.args[0]
-    assert passed_output.tracking_active is False
-    assert passed_output.raw_data['command_freshness_blocked'] is True
-    assert passed_output.raw_data['freshness_reason'] == 'tracker_unusable_for_following'
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    ctrl.follower.follow_target.assert_not_called()
+    ctrl.offboard_commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'tracker_unusable_for_following'
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
@@ -1086,25 +1100,26 @@ async def test_follow_target_returns_false_when_commander_rejects_intent():
         send_attitude_rate_commands=AsyncMock(return_value=True),
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
-    ctrl.offboard_commander = _commander_stub(accepted=False)
+    commander = _commander_stub(accepted=False)
+    ctrl.offboard_commander = commander
+    _prepare_dispatch_controller(ctrl)
 
     result = await ctrl.follow_target()
 
     assert result is False
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    commander.submit_intent.assert_called_once()
     _assert_no_frame_loop_px4_send(ctrl)
 
 
 @pytest.mark.asyncio
-async def test_follow_target_dispatches_when_follower_accepts_inactive_output():
-    """Inactive target-loss output must still publish when the follower opts in."""
+async def test_follow_target_inactive_output_bypasses_follower_and_requests_handoff():
+    """An inactive target cannot recover command authority through a follower."""
     ctrl = object.__new__(AppController)
     ctrl.tracker = _external_non_video_tracker()
     ctrl.tracking_started = False
     ctrl.following_active = True
     ctrl.follower = _follower_manager_stub()
     ctrl.follower.validate_tracker_compatibility.return_value = False
-    ctrl.follower.should_process_inactive_tracker_output.return_value = True
     tracker_output = _inactive_gimbal_output()
     ctrl.get_tracker_output = MagicMock(return_value=tracker_output)
     ctrl.px4_interface = SimpleNamespace(
@@ -1112,29 +1127,31 @@ async def test_follow_target_dispatches_when_follower_accepts_inactive_output():
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    follower = ctrl.follower
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
-    assert result is True
-    routed_output = ctrl.follower.follow_target.call_args.args[0]
-    assert routed_output.tracking_active is False
-    assert routed_output.raw_data["usable_for_following"] is False
-    assert routed_output.raw_data["command_freshness_blocked"] is True
-    assert routed_output.raw_data["freshness_reason"] == "tracking_inactive"
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    assert result is False
+    follower.follow_target.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        "tracking_inactive"
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
 @pytest.mark.asyncio
-async def test_follow_target_rejects_inactive_output_without_explicit_opt_in():
-    """Inactive output must not bypass opt-in through a permissive validator."""
+async def test_follow_target_rejects_inactive_output_with_permissive_validator():
+    """Inactive output cannot regain authority through follower validation."""
     ctrl = object.__new__(AppController)
     ctrl.tracker = SimpleNamespace(is_external_tracker=False)
     ctrl.tracking_started = True
     ctrl.following_active = True
     ctrl.follower = _follower_manager_stub(control_type='attitude_rate')
     ctrl.follower.validate_tracker_compatibility.return_value = True
-    ctrl.follower.should_process_inactive_tracker_output.return_value = False
     tracker_output = _inactive_position_output()
     ctrl.get_tracker_output = MagicMock(return_value=tracker_output)
     ctrl.video_handler = SimpleNamespace(
@@ -1150,11 +1167,15 @@ async def test_follow_target_rejects_inactive_output_without_explicit_opt_in():
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    follower = ctrl.follower
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
     assert result is False
-    ctrl.follower.follow_target.assert_not_called()
+    follower.follow_target.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once()
     _assert_no_frame_loop_px4_send(ctrl)
 
 
@@ -1167,8 +1188,8 @@ def test_external_tracker_without_capabilities_requires_video_by_default():
 
 
 @pytest.mark.asyncio
-async def test_follow_target_routes_real_manager_inactive_gimbal_stop_to_offboard_send():
-    """Real Follower manager forwarding must preserve inactive-output zero dispatch."""
+async def test_real_gimbal_follower_does_not_own_inactive_output_commands():
+    """The manager must not route inactive evidence into follower-local commands."""
     ctrl = object.__new__(AppController)
     ctrl.tracker = _external_non_video_tracker()
     ctrl.tracking_started = False
@@ -1188,6 +1209,9 @@ async def test_follow_target_routes_real_manager_inactive_gimbal_stop_to_offboar
     concrete.set_command_fields = MagicMock(return_value=True)
     concrete.log_follower_event = MagicMock()
     concrete.get_control_type = MagicMock(return_value='velocity_body_offboard')
+    concrete.setpoint_handler = SimpleNamespace(
+        get_airframe_phase=MagicMock(return_value='multicopter')
+    )
     concrete.get_last_command_intent = MagicMock(
         return_value=_command_intent(control_type='velocity_body_offboard')
     )
@@ -1197,22 +1221,24 @@ async def test_follow_target_routes_real_manager_inactive_gimbal_stop_to_offboar
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    manager = ctrl.follower
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
-    assert result is True
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    assert result is False
+    concrete.set_command_fields.assert_not_called()
+    manager.follower.set_command_fields.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once()
     _assert_no_frame_loop_px4_send(ctrl)
-    commands = concrete.set_command_fields.call_args.args[0]
-    assert commands["vel_body_fwd"] == 0.0
-    assert commands["vel_body_right"] == 0.0
-    assert commands["vel_body_down"] == 0.0
-    assert commands["yawspeed_deg_s"] == 0.0
 
 
 @pytest.mark.asyncio
-async def test_follow_target_routes_real_manager_inactive_position_hover_to_attitude_send():
-    """Inactive attitude-rate follower output must dispatch through manager forwarding."""
+async def test_real_attitude_follower_does_not_own_inactive_output_commands():
+    """Attitude followers cannot synthesize hover commands from lost evidence."""
     ctrl = object.__new__(AppController)
     ctrl.tracker = SimpleNamespace(is_external_tracker=True)
     ctrl.tracking_started = False
@@ -1222,15 +1248,15 @@ async def test_follow_target_routes_real_manager_inactive_position_hover_to_atti
 
     concrete = MCAttitudeRateFollower.__new__(MCAttitudeRateFollower)
     concrete.emergency_stop_active = False
-    concrete.target_lost = False
-    concrete.target_loss_start_time = None
-    concrete.target_loss_events = 0
     concrete.hover_thrust = 0.5
     concrete.validate_tracker_compatibility = MagicMock(return_value=False)
     concrete._check_altitude_safety = MagicMock(return_value=True)
     concrete.set_command_fields = MagicMock(return_value=True)
     concrete.update_telemetry_metadata = MagicMock()
     concrete.get_control_type = MagicMock(return_value='attitude_rate')
+    concrete.setpoint_handler = SimpleNamespace(
+        get_airframe_phase=MagicMock(return_value='multicopter')
+    )
     concrete.get_last_command_intent = MagicMock(
         return_value=_command_intent(control_type='attitude_rate')
     )
@@ -1240,17 +1266,17 @@ async def test_follow_target_routes_real_manager_inactive_position_hover_to_atti
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
-    assert result is True
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    assert result is False
+    concrete.set_command_fields.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once()
     _assert_no_frame_loop_px4_send(ctrl)
-    commands = concrete.set_command_fields.call_args.args[0]
-    assert commands["rollspeed_deg_s"] == 0.0
-    assert commands["pitchspeed_deg_s"] == 0.0
-    assert commands["yawspeed_deg_s"] == 0.0
-    assert commands["thrust"] == 0.5
 
 
 @pytest.mark.asyncio
@@ -1272,22 +1298,24 @@ async def test_follow_target_converts_cached_video_frame_to_inactive_fail_closed
     ctrl.get_tracker_output = MagicMock(return_value=tracker_output)
     ctrl.follower = _follower_manager_stub(control_type='attitude_rate')
     ctrl.follower.validate_tracker_compatibility.side_effect = lambda output: output.tracking_active
-    ctrl.follower.should_process_inactive_tracker_output.side_effect = lambda output: not output.tracking_active
     ctrl.px4_interface = SimpleNamespace(
         send_attitude_rate_commands=AsyncMock(return_value=True),
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    follower = ctrl.follower
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
-    assert result is True
-    passed_output = ctrl.follower.follow_target.call_args.args[0]
-    assert passed_output.tracking_active is False
-    assert passed_output.raw_data['usable_for_following'] is False
-    assert passed_output.raw_data['command_freshness_blocked'] is True
-    assert passed_output.raw_data['freshness_reason'] == 'video_frame_cached'
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    assert result is False
+    follower.follow_target.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'video_frame_cached'
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
@@ -1315,21 +1343,24 @@ async def test_follow_target_converts_prediction_only_output_to_fail_closed_outp
     ctrl.get_tracker_output = MagicMock(return_value=tracker_output)
     ctrl.follower = _follower_manager_stub(control_type='velocity_body_offboard')
     ctrl.follower.validate_tracker_compatibility.side_effect = lambda output: output.tracking_active
-    ctrl.follower.should_process_inactive_tracker_output.side_effect = lambda output: not output.tracking_active
     ctrl.px4_interface = SimpleNamespace(
         send_attitude_rate_commands=AsyncMock(return_value=True),
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    follower = ctrl.follower
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
-    assert result is True
-    passed_output = ctrl.follower.follow_target.call_args.args[0]
-    assert passed_output.tracking_active is False
-    assert passed_output.raw_data['freshness_reason'] == 'prediction_only'
-    assert passed_output.raw_data['command_freshness_blocked'] is True
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    assert result is False
+    follower.follow_target.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'prediction_only'
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
@@ -1360,6 +1391,9 @@ async def test_follow_target_routes_inactive_smart_tracker_multi_target_to_safe_
     concrete.set_command_fields = MagicMock(return_value=True)
     concrete.update_telemetry_metadata = MagicMock()
     concrete.get_control_type = MagicMock(return_value='velocity_body_offboard')
+    concrete.setpoint_handler = SimpleNamespace(
+        get_airframe_phase=MagicMock(return_value='multicopter')
+    )
     concrete.get_last_command_intent = MagicMock(
         return_value=_command_intent(control_type='velocity_body_offboard')
     )
@@ -1369,25 +1403,27 @@ async def test_follow_target_routes_inactive_smart_tracker_multi_target_to_safe_
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
-    assert result is True
+    assert result is False
     concrete.extract_target_coordinates.assert_not_called()
     concrete.calculate_control_commands.assert_not_called()
-    passed_output = concrete.validate_tracker_compatibility.call_args.args[0]
-    assert passed_output.tracking_active is False
-    assert passed_output.data_type == TrackerDataType.MULTI_TARGET
-    commands = concrete.set_command_fields.call_args.args[0]
-    assert commands["vel_body_down"] == 0.0
-    assert commands["yawspeed_deg_s"] == 0.0
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    concrete.validate_tracker_compatibility.assert_not_called()
+    concrete.set_command_fields.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'prediction_only'
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
 @pytest.mark.asyncio
-async def test_video_frame_unavailable_dispatches_synthetic_inactive_output():
-    """A hard video stall must still give the follower a fail-closed input."""
+async def test_video_frame_unavailable_requests_authority_handoff():
+    """A hard video stall must bypass followers and request handoff."""
     ctrl = object.__new__(AppController)
     ctrl.tracker = SimpleNamespace(
         is_external_tracker=False,
@@ -1397,12 +1433,15 @@ async def test_video_frame_unavailable_dispatches_synthetic_inactive_output():
     ctrl.following_active = True
     ctrl.follower = _follower_manager_stub(control_type='attitude_rate')
     ctrl.follower.validate_tracker_compatibility.side_effect = lambda output: output.tracking_active
-    ctrl.follower.should_process_inactive_tracker_output.side_effect = lambda output: not output.tracking_active
     ctrl.px4_interface = SimpleNamespace(
         send_attitude_rate_commands=AsyncMock(return_value=True),
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    follower = ctrl.follower
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.handle_video_frame_unavailable({
         'source': 'none',
@@ -1412,10 +1451,11 @@ async def test_video_frame_unavailable_dispatches_synthetic_inactive_output():
     })
 
     assert result is True
-    passed_output = ctrl.follower.follow_target.call_args.args[0]
-    assert passed_output.tracking_active is False
-    assert passed_output.raw_data['freshness_reason'] == 'video_frame_unavailable'
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    follower.follow_target.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'video_frame_unavailable'
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
@@ -1431,12 +1471,15 @@ async def test_sitl_video_stall_injection_uses_frame_unavailable_path():
     ctrl.following_active = True
     ctrl.follower = _follower_manager_stub(control_type='attitude_rate')
     ctrl.follower.validate_tracker_compatibility.side_effect = lambda output: output.tracking_active
-    ctrl.follower.should_process_inactive_tracker_output.side_effect = lambda output: not output.tracking_active
     ctrl.px4_interface = SimpleNamespace(
         send_attitude_rate_commands=AsyncMock(return_value=True),
         send_velocity_body_offboard_commands=AsyncMock(return_value=True),
     )
     ctrl.offboard_commander = _commander_stub()
+    follower = ctrl.follower
+    commander = ctrl.offboard_commander
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.inject_video_stall_for_validation(
         {
@@ -1450,15 +1493,18 @@ async def test_sitl_video_stall_injection_uses_frame_unavailable_path():
 
     assert result['status'] == 'accepted'
     assert result['accepted'] is True
+    assert result['dispatch_accepted'] is False
     assert result['injection']['source'] == 'unit.video_stall'
     assert result['injection']['tracker_requires_video'] is True
     assert result['injection']['frame_status']['reason'] == 'sitl_video_stall'
-    assert result['command_intent']['reason'] == 'unit_test'
+    assert result['command_intent'] is None
     assert result['offboard_commander']['running'] is True
-    passed_output = ctrl.follower.follow_target.call_args.args[0]
-    assert passed_output.tracking_active is False
-    assert passed_output.raw_data['freshness_reason'] == 'video_frame_unavailable'
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    assert result['continuity']['authority_state'] == 'HANDOFF_PENDING'
+    follower.follow_target.assert_not_called()
+    commander.submit_intent.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'video_frame_unavailable'
+    )
     _assert_no_frame_loop_px4_send(ctrl)
 
 
@@ -2127,8 +2173,17 @@ async def test_follower_dispatch_called_from_other_loop_is_owner_loop_atomic():
     ctrl.follower = SimpleNamespace(
         follow_target=follow_target,
         get_last_command_intent=MagicMock(return_value=intent),
+        get_control_type=MagicMock(return_value='velocity_body_offboard'),
+        get_airframe_phase=MagicMock(return_value='multicopter'),
     )
-    ctrl.offboard_commander = SimpleNamespace(submit_intent=submit_intent)
+    ctrl.offboard_commander = SimpleNamespace(
+        submit_intent=submit_intent,
+        get_status=MagicMock(return_value={
+            'running': True,
+            'task_active': True,
+        }),
+    )
+    _prepare_dispatch_controller(ctrl)
 
     try:
         accepted = await ctrl._dispatch_tracker_output_to_follower(
@@ -2154,18 +2209,20 @@ async def test_rejected_follower_update_invalidates_previous_commander_intent():
     ctrl.follower = SimpleNamespace(
         follow_target=MagicMock(return_value=False),
         get_last_command_intent=MagicMock(return_value=None),
+        get_control_type=MagicMock(return_value='velocity_body_offboard'),
+        get_airframe_phase=MagicMock(return_value='multicopter'),
     )
-    ctrl.offboard_commander = SimpleNamespace(
-        activate_failsafe_defaults=MagicMock(),
-    )
+    ctrl.offboard_commander = _commander_stub()
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     accepted = await ctrl._dispatch_tracker_output_on_flight_loop(
         _active_position_output()
     )
 
     assert accepted is False
-    ctrl.offboard_commander.activate_failsafe_defaults.assert_called_once_with(
-        "follower_rejected_tracker_output"
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        "follower_rejected_measurement"
     )
 
 
@@ -2174,18 +2231,23 @@ async def test_incompatible_tracker_output_invalidates_previous_commander_intent
     ctrl = object.__new__(AppController)
     ctrl.validate_tracker_follower_compatibility = MagicMock(return_value=False)
     ctrl._record_tracker_dispatch_trace = MagicMock()
-    ctrl.follower = SimpleNamespace(follow_target=MagicMock())
-    ctrl.offboard_commander = SimpleNamespace(
-        activate_failsafe_defaults=MagicMock(),
+    ctrl.follower = SimpleNamespace(
+        follow_target=MagicMock(),
+        get_control_type=MagicMock(return_value='velocity_body_offboard'),
+        get_airframe_phase=MagicMock(return_value='multicopter'),
     )
+    ctrl.offboard_commander = _commander_stub()
+    follower = ctrl.follower
+    _prepare_dispatch_controller(ctrl)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     accepted = await ctrl._dispatch_tracker_output_on_flight_loop(
         _active_position_output()
     )
 
     assert accepted is False
-    ctrl.follower.follow_target.assert_not_called()
-    ctrl.offboard_commander.activate_failsafe_defaults.assert_called_once_with(
+    follower.follow_target.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
         "tracker_follower_incompatible"
     )
 
@@ -2221,6 +2283,53 @@ def test_offboard_exit_callback_without_loop_fails_closed_locally():
 
     assert ctrl.following_active is False
     ctrl._handle_offboard_mode_exit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_target_continuity_handoff_records_confirmed_px4_stop():
+    ctrl = object.__new__(AppController)
+    ctrl._follower_state_lock = asyncio.Lock()
+    ctrl._is_command_preview_session = MagicMock(return_value=False)
+    ctrl._disconnect_px4_internal = AsyncMock(
+        return_value={
+            "steps": ["Offboard mode stopped on PX4"],
+            "errors": [],
+            "offboard_stop_action": {"executed": True},
+        }
+    )
+    supervisor = MagicMock()
+    ctrl._get_target_continuity_supervisor = MagicMock(return_value=supervisor)
+
+    await ctrl._execute_target_continuity_handoff("target_evidence_absent")
+
+    ctrl._disconnect_px4_internal.assert_awaited_once_with(
+        commander_publish_final=False,
+        attempt_offboard_stop=True,
+        reset_continuity=False,
+    )
+    supervisor.record_handoff_result.assert_called_once_with(
+        success=True,
+        detail="px4_offboard_stop_confirmed",
+    )
+
+
+@pytest.mark.asyncio
+async def test_target_continuity_handoff_does_not_overstate_unconfirmed_stop():
+    ctrl = object.__new__(AppController)
+    ctrl._follower_state_lock = asyncio.Lock()
+    ctrl._is_command_preview_session = MagicMock(return_value=False)
+    ctrl._disconnect_px4_internal = AsyncMock(
+        return_value={"steps": ["local cleanup complete"], "errors": []}
+    )
+    supervisor = MagicMock()
+    ctrl._get_target_continuity_supervisor = MagicMock(return_value=supervisor)
+
+    await ctrl._execute_target_continuity_handoff("target_evidence_absent")
+
+    supervisor.record_handoff_result.assert_called_once_with(
+        success=False,
+        detail="handoff_not_confirmed",
+    )
 
 
 @pytest.mark.asyncio
@@ -6215,6 +6324,23 @@ async def test_typed_following_telemetry_reports_active_fields_and_diagnostics()
     handler.app_controller = SimpleNamespace(
         following_active=True,
         follower=follower,
+        get_target_continuity_status=MagicMock(return_value={
+            "schema_version": 1,
+            "source": "target_continuity_supervisor",
+            "authority_state": "ACTIVE",
+            "policy_mode": "immediate_handoff",
+            "terminal_action": "hold",
+            "session_epoch": 4,
+            "episode_id": 0,
+            "authority_fraction": 1.0,
+            "loss_elapsed_s": 0.0,
+            "coast_distance_m": 0.0,
+            "reason_code": "confirmed_target_authority",
+            "handoff_pending": False,
+            "handoff_request": None,
+            "last_handoff_result": None,
+            "claim_boundary": "Process-local decision only.",
+        }),
         offboard_commander=SimpleNamespace(
             get_status=MagicMock(return_value={
                 "exists": True,
@@ -6235,7 +6361,6 @@ async def test_typed_following_telemetry_reports_active_fields_and_diagnostics()
     handler.telemetry_handler = SimpleNamespace(
         get_follower_data=MagicMock(return_value={
             "fields": {"legacy": 9.0},
-            "target_loss_handler": {"state": "ACTIVE"},
             "safety_systems": {"safety_violations_count": 0},
             "performance": {"success_rate_percent": 100.0},
             "circuit_breaker": {"active": False, "status": "LIVE_MODE"},
@@ -6248,7 +6373,7 @@ async def test_typed_following_telemetry_reports_active_fields_and_diagnostics()
     with patch('classes.fastapi_handler.Parameters.FOLLOWER_MODE', 'gm_velocity_vector'):
         result = await handler.get_following_telemetry()
 
-    assert result["schema_version"] == 1
+    assert result["schema_version"] == 2
     assert result["source"] == "following_telemetry"
     assert result["status"] == "active"
     assert result["consumer_guidance"] == "following_active"
@@ -6256,7 +6381,7 @@ async def test_typed_following_telemetry_reports_active_fields_and_diagnostics()
     assert result["fields"]["vel_body_fwd"] == 1.25
     assert "legacy" not in result["fields"]
     assert result["field_source"] == "active_follower"
-    assert result["target_loss_handler"]["state"] == "ACTIVE"
+    assert result["continuity"]["authority_state"] == "ACTIVE"
     assert result["safety_systems"]["safety_violations_count"] == 0
     assert result["performance"]["success_rate_percent"] == 100.0
     assert result["circuit_breaker_active"] is False

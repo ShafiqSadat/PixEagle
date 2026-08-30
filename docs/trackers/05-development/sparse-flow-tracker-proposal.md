@@ -83,7 +83,7 @@ The tracker must not publish its own predicted box as a measurement.
 `SparseFlow` is one measurement provider behind `BaseTracker` and
 `TrackerOutput`. Existing shared components remain authoritative:
 
-- `AppController` owns target loss and the bounded recovery window.
+- `TargetContinuitySupervisor` owns command authority after evidence loss.
 - The shared estimator supplies overlay/search prediction only.
 - Detector-assisted re-detection owns long-term reacquisition.
 - `TrackerRuntimeStatus` owns command freshness.

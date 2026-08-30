@@ -74,7 +74,7 @@ Comprehensive documentation for the autonomous following system.
 | [GNC Concepts](followers/03-gnc-concepts/README.md) | PN, L1, TECS, PID algorithms |
 | [Configuration](followers/04-configuration/README.md) | Parameters, schema, tuning |
 | [Development Guide](followers/05-development/README.md) | Creating new followers |
-| [Safety System](followers/06-safety/README.md) | SafetyManager and limits |
+| [Safety System](followers/06-safety/README.md) | Safety limits and target continuity |
 | [Integration](followers/07-integration/README.md) | Tracker and MAVLink integration |
 
 ---

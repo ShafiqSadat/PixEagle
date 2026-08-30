@@ -54,14 +54,29 @@ Safety:
     # Safety behavior
     EMERGENCY_STOP_ENABLED: true
     RTL_ON_VIOLATION: true
-    TARGET_LOSS_ACTION: hover
     MAX_SAFETY_VIOLATIONS: 5
 ```
 
 This section is the hard safety envelope. `Safety.FollowerOverrides` accepts
 only canonical follower names and sparse values that tighten this envelope.
-Target-loss action may be vehicle specific; for example, a fixed-wing profile
-may use `orbit` because it cannot hover.
+
+## Target Continuity
+
+Target-evidence command authority is global rather than follower-specific:
+
+~~~yaml
+TargetContinuity:
+  MODE: immediate_handoff
+  MAX_COAST_TIME_S: 1.0
+  MAX_COAST_DISTANCE_M: 2.0
+  REACQUIRE_CONFIRMATION_S: 0.5
+  AUTHORITY_RESTORE_TIME_S: 1.0
+  TERMINAL_ACTION: hold
+~~~
+
+The default requests immediate handoff. `bounded_decay` is currently
+qualified only for multicopter body-velocity command preview. See
+[Target Continuity](../06-safety/target-continuity.md).
 
 ---
 
@@ -122,12 +137,6 @@ MC_VELOCITY_CHASE:
 
   # Vertical control
   ENABLE_ALTITUDE_CONTROL: true
-
-  # Target loss
-  RAMP_DOWN_ON_TARGET_LOSS: true
-  TARGET_LOSS_TIMEOUT: 2.0           # seconds
-  TARGET_LOSS_STOP_VELOCITY: 0.0     # m/s
-  TARGET_LOSS_COORDINATE_THRESHOLD: 990
 
   # Tracking validity (hard motion/altitude protections live in Safety)
   MAX_TRACKING_ERROR: 1.5
@@ -237,10 +246,6 @@ FW_ATTITUDE_RATE:
   STALL_RECOVERY_PITCH: -5.0
   STALL_RECOVERY_THROTTLE: 1.0
 
-  # Target loss
-  TARGET_LOSS_TIMEOUT: 3.0
-  TARGET_LOSS_ACTION: "orbit"
-  ORBIT_RADIUS: 100.0
 ```
 
 ---
@@ -258,11 +263,6 @@ GM_VELOCITY_CHASE:
   EMERGENCY_STOP_ENABLED: true
   ALTITUDE_SAFETY_ENABLED: true
   MAX_SAFETY_VIOLATIONS: 5
-
-  TARGET_LOSS_HANDLING:
-    ENABLED: true
-    CONTINUE_VELOCITY_TIMEOUT: 3.0
-    RESPONSE_ACTION: "hover"
 ```
 
 ### GM_VELOCITY_VECTOR Section

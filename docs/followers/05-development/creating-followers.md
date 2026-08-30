@@ -25,6 +25,7 @@ follower_profiles:
     display_name: "My Custom Follower"
     description: "Brief description of behavior"
     control_type: "velocity_body_offboard"
+    airframe_phase: "multicopter"
     required_fields:
       - vel_body_fwd
       - vel_body_right
@@ -36,9 +37,10 @@ follower_profiles:
     optional_tracker_data: []
 ```
 
-Every `required_fields` entry must be present in every command intent. Optional
-command fields are intentionally unsupported. Tracker capabilities may still be
-optional through `optional_tracker_data`.
+Every `required_fields` entry must be present in every command intent.
+`airframe_phase` and `control_type` also select the shared target
+continuity capability. Optional command fields are intentionally unsupported.
+Tracker capabilities may still be optional through `optional_tracker_data`.
 
 ---
 
@@ -184,16 +186,6 @@ class MyFollower(BaseFollower):
             self.reset_command_fields()
             return False
 
-    def should_process_inactive_tracker_output(self, tracker_data: TrackerOutput) -> bool:
-        """
-        Optional target-loss opt-in.
-
-        Keep the BaseFollower default unless this follower can convert inactive
-        tracker output into a command that AppController must still publish,
-        such as hover, zero velocity, orbit, or controlled coast.
-        """
-        return False
-
     def get_status(self) -> Dict[str, Any]:
         """Return follower status for telemetry."""
         return {
@@ -203,9 +195,11 @@ class MyFollower(BaseFollower):
         }
 ```
 
-Only return `True` from `follow_target()` after target loss if a command was
-updated or intentionally retained for publication. Returning `False` tells the
-current AppController command path not to call the PX4 send method.
+`follow_target()` receives only confirmed command-usable evidence.
+Return `True` only after publishing a complete nominal
+`CommandIntent`. Do not add follower-local inactive-output, target-loss,
+coast, hover, or mode-change behavior; the shared target continuity supervisor
+owns that authority boundary.
 
 ---
 

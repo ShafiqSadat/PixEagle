@@ -70,7 +70,7 @@ def write_generation_config(path: Path, marker: int) -> str:
         Path('configs/config_default.yaml').read_text(encoding='utf-8')
     )
     general = copy.deepcopy(defaults['Follower']['General'])
-    general['TARGET_LOSS_TIMEOUT'] = float(marker)
+    general['CONTROL_UPDATE_RATE'] = float(marker)
     config = {
         'Example': {'generation_marker': marker},
         'Safety': {'GlobalLimits': {'MIN_ALTITUDE': marker}},
@@ -466,7 +466,7 @@ BOUNDARY_MARGIN_PIXELS: 99
         assert Parameters.GENERATION_MARKER == 1
         assert Parameters._loaded_config_file == first_config
         assert safety_manager.get_limit('MIN_ALTITUDE') == 1
-        assert follower_manager.get_param('TARGET_LOSS_TIMEOUT') == 1
+        assert follower_manager.get_param('CONTROL_UPDATE_RATE') == 1
         assert Parameters.get_runtime_config_generation() == generation_before
 
     def test_reload_updates_each_dependent_manager_once(
@@ -708,7 +708,7 @@ class TestRuntimeConfigPublicationConsistency:
                                 generation,
                                 Parameters.GENERATION_MARKER,
                                 safety_manager.get_limit('MIN_ALTITUDE'),
-                                follower_manager.get_param('TARGET_LOSS_TIMEOUT'),
+                                follower_manager.get_param('CONTROL_UPDATE_RATE'),
                             )
                         )
                 except Exception as exc:  # pragma: no cover - assertion aid
@@ -790,7 +790,7 @@ class TestRuntimeConfigPublicationConsistency:
                 'parameter': lambda: Parameters.GENERATION_MARKER,
                 'safety': lambda: safety_manager.get_limit('MIN_ALTITUDE'),
                 'follower': lambda: follower_manager.get_param(
-                    'TARGET_LOSS_TIMEOUT'
+                    'CONTROL_UPDATE_RATE'
                 ),
             }
 

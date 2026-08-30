@@ -31,7 +31,7 @@ from ruamel.yaml import YAML as RuamelYAML
 from ruamel.yaml.comments import CommentedMap as RuamelCommentedMap
 
 
-CONFIG_SCHEMA_VERSION = '1.6.0'
+CONFIG_SCHEMA_VERSION = '1.7.0'
 
 
 # Define categories for sections
@@ -82,6 +82,11 @@ SECTION_CATEGORIES = {
 
     # Safety & Control
     'Safety': {'category': 'safety', 'display_name': 'Safety Limits', 'icon': 'shield'},
+    'TargetContinuity': {
+        'category': 'safety',
+        'display_name': 'Target Continuity',
+        'icon': 'shield',
+    },
     'PID': {'category': 'control', 'display_name': 'PID Controller', 'icon': 'tune'},
 
     # Processing
@@ -641,7 +646,6 @@ SCHEMA_OVERRIDES = {
             'MAX_ROLL_RATE',
             'EMERGENCY_STOP_ENABLED',
             'RTL_ON_VIOLATION',
-            'TARGET_LOSS_ACTION',
             'MAX_SAFETY_VIOLATIONS',
         ],
         'additional_properties': False,
@@ -714,16 +718,6 @@ SCHEMA_OVERRIDES = {
     },
     'Safety.GlobalLimits.RTL_ON_VIOLATION': {
         'description': 'Request return-to-launch for configured safety violations',
-    },
-    'Safety.GlobalLimits.TARGET_LOSS_ACTION': {
-        'description': 'Safety action requested when the active target is lost',
-        'options': [
-            {'value': 'hover', 'label': 'Hover'},
-            {'value': 'orbit', 'label': 'Orbit'},
-            {'value': 'stop', 'label': 'Stop'},
-            {'value': 'rtl', 'label': 'Return to launch'},
-            {'value': 'continue', 'label': 'Continue'},
-        ],
     },
     'Safety.GlobalLimits.MAX_SAFETY_VIOLATIONS': {
         'min': 1,
@@ -1214,13 +1208,36 @@ SCHEMA_OVERRIDES = {
         'step': 0.05, 'unit': 's',
         'description': 'Deadline for one application-level Offboard setpoint publication'},
 
-    # TARGET_LOSS_COORDINATE_THRESHOLD — was mistyped as int=990; correct is float in [0,5]
-    'FW_ATTITUDE_RATE.TARGET_LOSS_COORDINATE_THRESHOLD': {
-        'type': 'float', 'default': 1.5, 'min': 0.0, 'max': 5.0, 'step': 0.1,
-        'description': 'Normalized pixel threshold for target loss detection (0-2 range typical)'},
-    'MC_ATTITUDE_RATE.TARGET_LOSS_COORDINATE_THRESHOLD': {
-        'type': 'float', 'default': 1.5, 'min': 0.0, 'max': 5.0, 'step': 0.1,
-        'description': 'Normalized pixel threshold for target loss detection (0-2 range typical)'},
+    'TargetContinuity.MODE': {
+        'options': [
+            {'value': 'immediate_handoff', 'label': 'Immediate handoff'},
+            {'value': 'bounded_decay', 'label': 'Bounded decay'},
+        ],
+        'description': (
+            'Command-authority policy after confirmed target evidence is lost; '
+            'bounded decay is currently qualified for command preview only'
+        ),
+    },
+    'TargetContinuity.MAX_COAST_TIME_S': {
+        'min': 0.0, 'max': 10.0, 'step': 0.1, 'unit': 's',
+        'description': 'Hard elapsed-time budget for a qualified bounded-decay episode',
+    },
+    'TargetContinuity.MAX_COAST_DISTANCE_M': {
+        'min': 0.0, 'max': 100.0, 'step': 0.1, 'unit': 'm',
+        'description': 'Hard integrated horizontal-distance budget for bounded decay',
+    },
+    'TargetContinuity.REACQUIRE_CONFIRMATION_S': {
+        'min': 0.0, 'max': 10.0, 'step': 0.1, 'unit': 's',
+        'description': 'Continuous confirmed-evidence interval required before authority restoration',
+    },
+    'TargetContinuity.AUTHORITY_RESTORE_TIME_S': {
+        'min': 0.0, 'max': 10.0, 'step': 0.1, 'unit': 's',
+        'description': 'Ramp duration from the continuity baseline to the nominal follower intent',
+    },
+    'TargetContinuity.TERMINAL_ACTION': {
+        'options': [{'value': 'hold', 'label': 'Hold'}],
+        'description': 'Requested PX4 action after command authority is surrendered',
+    },
 
     # GM_VELOCITY_CHASE — degree/angle params wrongly capped at 1.0
     'GM_VELOCITY_CHASE.NEUTRAL_PITCH_ANGLE': {
@@ -1248,14 +1265,10 @@ SCHEMA_OVERRIDES = {
         'description': 'Forward velocity ramp-up acceleration rate (m/s²)'},
     'MC_VELOCITY_CHASE.INITIAL_FORWARD_VELOCITY': {'min': 0.0, 'max': 30.0, 'step': 0.1, 'unit': 'm/s',
         'description': 'Initial forward velocity when target acquired (m/s)'},
-    'MC_VELOCITY_CHASE.TARGET_LOSS_STOP_VELOCITY': {'min': 0.0, 'max': 30.0, 'step': 0.1, 'unit': 'm/s',
-        'description': 'Forward velocity to hold when target is temporarily lost (m/s)'},
     'MC_VELOCITY_CHASE.MIN_FORWARD_VELOCITY_THRESHOLD': {'min': 0.0, 'max': 20.0, 'step': 0.05, 'unit': 'm/s',
         'description': 'Minimum forward velocity to maintain (m/s). Critical for VTOL or fixed-wing configurations.'},
 
-    # FW_ATTITUDE_RATE — orbit/L1 params wrongly capped at 100m
-    'FW_ATTITUDE_RATE.ORBIT_RADIUS':    {'min': 10.0, 'max': 2000.0, 'step': 5.0, 'unit': 'm',
-        'description': 'Loiter orbit radius on target loss (meters)'},
+    # FW_ATTITUDE_RATE — L1 params wrongly capped at 100m
     'FW_ATTITUDE_RATE.L1_MAX_DISTANCE': {'min': 5.0,  'max': 1000.0, 'step': 5.0, 'unit': 'm',
         'description': 'Maximum L1 lookahead distance at high speed (meters)'},
 
@@ -1312,6 +1325,7 @@ SECTION_RELOAD_TIERS = {
     'PID': 'follower_restart',
     'Follower': 'follower_restart',
     'Safety': 'follower_restart',
+    'TargetContinuity': 'follower_restart',
     'MC_VELOCITY_CHASE': 'follower_restart',
     'MC_VELOCITY_POSITION': 'follower_restart',
     'MC_VELOCITY_DISTANCE': 'follower_restart',

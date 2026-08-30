@@ -21,7 +21,7 @@ Key Features:
 - PID-controlled vertical tracking
 - Shared YawRateSmoother (deadzone, rate limiting, EMA)
 - Altitude safety monitoring with RTL capability
-- Target loss handling with automatic ramp-down
+- Shared target-continuity authority outside the follower
 - Emergency stop functionality
 - Comprehensive telemetry and status reporting
 
@@ -35,7 +35,6 @@ remains the default and recommended mode for fixed-camera tracking.
 Unit Conventions:
 =================
 - Target coordinates: Normalized [-1, 1], center at (0, 0)
-- Target loss threshold: Normalized (default 1.5 = edge of frame)
 - PID input: Normalized error [-1, 1]
 - PID output (yaw): rad/s (internal), converted to deg/s for MAVSDK
 - Velocity commands: m/s (body frame)
@@ -53,7 +52,6 @@ Control Flow (v5.7.0):
 
 Compatibility notes:
 ====================
-- Fixed TARGET_LOSS_COORDINATE_THRESHOLD (was 990, now 1.5 normalized)
 - Added explicit fixed-camera advisory for sideslip mode
 - Added YawRateSmoother for smooth yaw commands
 - Made VIDEO_HEIGHT_PIXELS configurable (was hardcoded 480)
@@ -62,7 +60,6 @@ Compatibility notes:
 Configuration:
 =============
 - LATERAL_GUIDANCE_MODE: coordinated_turn (recommended) or sideslip (advanced)
-- TARGET_LOSS_COORDINATE_THRESHOLD: Normalized coords (default 1.5)
 - YAW_SMOOTHING: Shared deadzone, rate-limit, and EMA configuration
 - VIDEO_HEIGHT_PIXELS: Camera resolution for rate calculations
 - FORWARD_VELOCITY_DEADZONE: Velocity ramping deadzone
@@ -73,7 +70,7 @@ from classes.followers.custom_pid import CustomPID
 from classes.followers.yaw_rate_smoother import YawRateSmoother  # WP9: canonical import
 from classes.parameters import Parameters
 from classes.follower_config_manager import get_follower_config_manager
-from classes.tracker_output import TrackerOutput, TrackerDataType
+from classes.tracker_output import TrackerOutput
 import logging
 import numpy as np
 import time
@@ -112,7 +109,7 @@ class MCVelocityChaseFollower(BaseFollower):
     - Forward velocity ramping with configurable acceleration rate
     - YawRateSmoother integration (deadzone, rate limiting, EMA, speed scaling)
     - PID-controlled yaw and vertical tracking
-    - Target loss detection with normalized coordinate threshold (default 1.5)
+    - Shared target-evidence validation before command publication
     - Altitude safety monitoring with RTL capability
     - Emergency stop functionality for critical situations
     - Velocity smoothing for stable control commands
@@ -121,7 +118,7 @@ class MCVelocityChaseFollower(BaseFollower):
     Safety Features:
     ===============
     - Altitude bounds checking with automatic RTL
-    - Target loss handling with configurable timeout
+    - Target-continuity handoff at the shared command boundary
     - Emergency velocity zeroing capability
     - Velocity command smoothing and limiting
     - Comprehensive error handling and recovery
@@ -156,11 +153,9 @@ class MCVelocityChaseFollower(BaseFollower):
         # v5.0.0: Use SafetyManager for velocity limits (single source of truth)
         self.max_forward_velocity = self.velocity_limits.forward
         self.forward_ramp_rate = config.get('FORWARD_RAMP_RATE', 0.5)
-        self.ramp_down_on_target_loss = config.get('RAMP_DOWN_ON_TARGET_LOSS', True)
         # Shared params from FollowerConfigManager (General → FollowerOverrides → Fallback)
         fcm = get_follower_config_manager()
         _fn = 'MC_VELOCITY_CHASE'
-        self.target_loss_timeout = fcm.get_param('TARGET_LOSS_TIMEOUT', _fn)
         self.enable_altitude_control = fcm.get_param('ENABLE_ALTITUDE_CONTROL', _fn)
         self.lateral_guidance_mode = fcm.get_param('LATERAL_GUIDANCE_MODE', _fn)
         self.guidance_mode_switch_velocity = fcm.get_param('GUIDANCE_MODE_SWITCH_VELOCITY', _fn)
@@ -182,11 +177,6 @@ class MCVelocityChaseFollower(BaseFollower):
         self.velocity_smoothing_enabled = fcm.get_param('COMMAND_SMOOTHING_ENABLED', _fn)
         self.smoothing_factor = fcm.get_param('SMOOTHING_FACTOR', _fn)
         self.min_forward_velocity_threshold = config.get('MIN_FORWARD_VELOCITY_THRESHOLD', 0.2)
-        # Target loss stop velocity: velocity to ramp to when target is lost (0.0 = full stop)
-        self.target_loss_stop_velocity = config.get('TARGET_LOSS_STOP_VELOCITY', 0.0)
-        # Coordinate threshold for detecting lost target (abs value > this = lost)
-        # v5.7.1: Fallback 1.5 matches normalized coords [-1,1] - target at edge = near loss
-        self.target_loss_coord_threshold = fcm.get_param('TARGET_LOSS_COORDINATE_THRESHOLD', _fn)
         self.ramp_update_rate = config.get('RAMP_UPDATE_RATE', 10.0)
 
         # Max yaw rate in radians for PID limit (from base class cached limits)
@@ -226,11 +216,6 @@ class MCVelocityChaseFollower(BaseFollower):
         self.current_forward_velocity = self.initial_forward_velocity
         self.target_forward_velocity = self.max_forward_velocity
         self.last_ramp_update_time = time.monotonic()
-        
-        # Initialize target tracking state
-        self.target_lost = False
-        self.target_loss_start_time = None
-        self.last_valid_target_coords = initial_target_coords
         
         # Initialize safety monitoring state
         self.emergency_stop_active = False
@@ -298,7 +283,7 @@ class MCVelocityChaseFollower(BaseFollower):
             'Fixed camera: coordinated_turn recommended; sideslip may lose target.'
         )
         self.update_telemetry_metadata('safety_features', [
-            'altitude_monitoring', 'target_loss_handling', 'velocity_ramping', 'emergency_stop',
+            'altitude_monitoring', 'velocity_ramping', 'emergency_stop',
             'yaw_rate_smoothing',  # v5.7.0: YawRateSmoother integration
             'adaptive_dive_climb' if self.adaptive_mode_enabled else None,
             'pitch_compensation' if self.pitch_compensation_enabled else None
@@ -560,9 +545,6 @@ class MCVelocityChaseFollower(BaseFollower):
             # Determine target velocity based on system state
             if self.emergency_stop_active:
                 target_velocity = 0.0
-            elif self.target_lost and self.ramp_down_on_target_loss:
-                # Use configurable stop velocity (default 0.0 = full stop on target loss)
-                target_velocity = self.target_loss_stop_velocity
             else:
                 target_velocity = self.max_forward_velocity
 
@@ -738,58 +720,6 @@ class MCVelocityChaseFollower(BaseFollower):
         except Exception as e:
             logger.error(f"Error calculating tracking commands: {e}")
             return 0.0, 0.0, 0.0  # Safe fallback
-
-    def _handle_target_loss(self, target_coords: Tuple[float, float]) -> bool:
-        """
-        Handles target loss detection and recovery logic.
-        
-        Args:
-            target_coords (Tuple[float, float]): Current target coordinates.
-            
-        Returns:
-            bool: True if target is valid, False if target is lost.
-        """
-        try:
-            current_time = time.time()
-            
-            # Check if target coordinates indicate a lost target
-            # (This depends on your vision system's lost target indication)
-            # Assuming invalid coordinates like (-999, -999) or (nan, nan) indicate lost target
-            threshold = self.target_loss_coord_threshold
-            is_valid_target = (
-                self.validate_target_coordinates(target_coords) and
-                not (np.isnan(target_coords[0]) or np.isnan(target_coords[1])) and
-                not (abs(target_coords[0]) > threshold or abs(target_coords[1]) > threshold)
-            )
-            
-            if is_valid_target:
-                # Target is valid - reset loss tracking
-                if self.target_lost:
-                    logger.info("Target recovered after loss")
-                self.target_lost = False
-                self.target_loss_start_time = None
-                self.last_valid_target_coords = target_coords
-                return True
-            else:
-                # Target appears to be lost
-                if not self.target_lost:
-                    # Just lost the target
-                    self.target_lost = True
-                    self.target_loss_start_time = current_time
-                    logger.warning(f"Target lost at coordinates: {target_coords}")
-                else:
-                    # Target has been lost for some time
-                    loss_duration = current_time - self.target_loss_start_time
-                    timeout = self.target_loss_timeout
-                    
-                    if loss_duration > timeout:
-                        logger.debug(f"Target lost for {loss_duration:.1f}s (timeout: {timeout}s)")
-                
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error in target loss handling: {e}")
-            return False
 
     def _calculate_target_vertical_rate(self, target_coords: Tuple[float, float], tracker_data: TrackerOutput) -> Tuple[float, float, float]:
         """
@@ -1388,14 +1318,14 @@ class MCVelocityChaseFollower(BaseFollower):
             logger.error(f"Altitude safety check failed: {e}")
             return False
 
-    def calculate_control_commands(self, tracker_data: TrackerOutput) -> None:
+    def calculate_control_commands(self, tracker_data: TrackerOutput) -> bool:
         """
         Calculates and sets body velocity control commands with dual-mode lateral guidance.
 
         This method implements the core body velocity chase logic with support for both
         sideslip and coordinated turn lateral guidance modes:
         1. Extracts target coordinates from structured tracker data
-        2. Handles target loss detection and recovery with confidence analysis
+        2. Validates follower-specific measurement constraints
         3. Updates forward velocity using ramping logic
         4. Calculates lateral and vertical tracking commands with mode switching
         5. Applies safety checks and emergency stops
@@ -1414,9 +1344,8 @@ class MCVelocityChaseFollower(BaseFollower):
         Args:
             tracker_data (TrackerOutput): Structured tracker data with position, confidence, etc.
 
-        Note:
-            This method updates the setpoint handler directly and does not return values.
-            Control commands are applied via the schema-aware setpoint management system.
+        Returns:
+            bool: Whether a complete nominal command intent was produced.
         """
         try:
             self.last_ramp_update_time, dt = self.bounded_control_delta(
@@ -1428,14 +1357,11 @@ class MCVelocityChaseFollower(BaseFollower):
             target_coords = self.extract_target_coordinates(tracker_data)
             if not target_coords:
                 logger.warning("No valid target coordinates found in tracker data")
-                self._handle_tracking_failure()
-                return
+                return False
             
-            # Handle target loss detection (enhanced with confidence analysis)
-            target_valid = self._handle_target_loss_enhanced(target_coords, tracker_data)
-            
-            # Use last valid coordinates if target is lost
-            tracking_coords = target_coords if target_valid else self.last_valid_target_coords
+            if not self._validate_command_measurement(target_coords, tracker_data):
+                return False
+            tracking_coords = target_coords
             
             # Update forward velocity using ramping logic
             forward_velocity = self._update_forward_velocity(dt)
@@ -1445,7 +1371,7 @@ class MCVelocityChaseFollower(BaseFollower):
 
             # === ADAPTIVE DIVE/CLIMB CONTROL ===
             # Calculate vertical rate and apply adaptive corrections if enabled
-            if self.adaptive_mode_enabled and target_valid:
+            if self.adaptive_mode_enabled:
                 try:
                     # Phase 1: Calculate vertical rate error
                     smoothed_rate, expected_rate, rate_error = self._calculate_target_vertical_rate(
@@ -1508,7 +1434,7 @@ class MCVelocityChaseFollower(BaseFollower):
             
             # Update telemetry metadata
             self.update_telemetry_metadata('last_target_coords', target_coords)
-            self.update_telemetry_metadata('target_valid', target_valid)
+            self.update_telemetry_metadata('target_valid', True)
             self.update_telemetry_metadata('current_forward_velocity', forward_velocity)
             self.update_telemetry_metadata('active_lateral_mode', self.active_lateral_mode)
             self.update_telemetry_metadata('emergency_stop_active', self.emergency_stop_active)
@@ -1525,19 +1451,11 @@ class MCVelocityChaseFollower(BaseFollower):
             logger.debug(f"Body velocity commands ({self.active_lateral_mode}) - "
                         f"Fwd: {forward_velocity:.2f}, Right: {right_velocity:.2f}, "
                         f"Down: {down_velocity:.2f} m/s, Yaw: {smoothed_yaw_rate:.2f} deg/s (raw: {raw_yaw_rate_deg_s:.2f})")
+            return True
             
         except Exception as e:
             logger.error(f"Error calculating control commands: {e}")
-            # Set safe fallback commands
-            self.set_command_fields(
-                {
-                    'vel_body_fwd': 0.0,
-                    'vel_body_right': 0.0,
-                    'vel_body_down': 0.0,
-                    'yawspeed_deg_s': 0.0,
-                },
-                reason='mc_velocity_chase_control_error_fallback',
-            )
+            return False
 
     def follow_target(self, tracker_data: TrackerOutput) -> bool:
         """
@@ -1553,13 +1471,8 @@ class MCVelocityChaseFollower(BaseFollower):
             bool: True if following executed successfully, False otherwise.
         """
         try:
-            inactive_output = self.should_process_inactive_tracker_output(tracker_data)
-
             # Validate tracker compatibility (errors are logged by base class with rate limiting)
-            if (
-                not self.validate_tracker_compatibility(tracker_data) and
-                not inactive_output
-            ):
+            if not self.validate_tracker_compatibility(tracker_data):
                 return False
 
             # Perform altitude safety check
@@ -1567,11 +1480,9 @@ class MCVelocityChaseFollower(BaseFollower):
                 logger.error("Altitude safety check failed - aborting body velocity following")
                 return False
 
-            if inactive_output:
-                return self._handle_inactive_tracker_output()
-
             # Calculate and apply control commands using structured data
-            self.calculate_control_commands(tracker_data)
+            if not self.calculate_control_commands(tracker_data):
+                return False
 
             logger.debug(f"Body velocity following executed for tracker: {tracker_data.tracker_id}")
             return True
@@ -1593,48 +1504,6 @@ class MCVelocityChaseFollower(BaseFollower):
             self.reset_command_fields()
             return False
 
-    def _handle_inactive_tracker_output(self) -> bool:
-        """Publish an explicit stop command for inactive vision target output."""
-        current_time = time.time()
-        if not getattr(self, 'target_lost', False):
-            self.target_lost = True
-            self.target_loss_start_time = current_time
-            logger.warning("Inactive tracker output received - stopping chase command")
-
-        stop_velocity = getattr(self, 'target_loss_stop_velocity', 0.0)
-        self.current_forward_velocity = stop_velocity
-        if not self.set_command_fields(
-            {
-                'vel_body_fwd': stop_velocity,
-                'vel_body_right': 0.0,
-                'vel_body_down': 0.0,
-                'yawspeed_deg_s': 0.0,
-            },
-            reason='mc_velocity_chase_inactive_stop',
-        ):
-            return False
-        self.update_telemetry_metadata('target_valid', False)
-        self.update_telemetry_metadata('target_lost', True)
-        return True
-
-    def should_process_inactive_tracker_output(self, tracker_data: TrackerOutput) -> bool:
-        """
-        Allow inactive position outputs to publish an explicit stop command.
-
-        Inactive tracker output must not run normal pursuit math even when it
-        carries last-known valid coordinates.
-        """
-        return self._is_inactive_tracker_output(
-            tracker_data,
-            allowed_types={
-                TrackerDataType.POSITION_2D,
-                TrackerDataType.POSITION_3D,
-                TrackerDataType.BBOX_CONFIDENCE,
-                TrackerDataType.VELOCITY_AWARE,
-                TrackerDataType.MULTI_TARGET,
-            },
-        )
-
     # ==================== Enhanced Telemetry and Status ====================
     
     def get_chase_status(self) -> Dict[str, Any]:
@@ -1645,8 +1514,6 @@ class MCVelocityChaseFollower(BaseFollower):
             Dict[str, Any]: Detailed status including velocities, modes, safety status, and control state.
         """
         try:
-            current_time = time.time()
-            
             return {
                 # Velocity State
                 'current_forward_velocity': self.current_forward_velocity,
@@ -1660,14 +1527,6 @@ class MCVelocityChaseFollower(BaseFollower):
                 'configured_lateral_mode': self.lateral_guidance_mode,
                 'auto_mode_switching_enabled': self.enable_auto_mode_switching,
                 'mode_switch_velocity': self.guidance_mode_switch_velocity,
-                
-                # Target Tracking State
-                'target_lost': self.target_lost,
-                'target_loss_duration': (
-                    (current_time - self.target_loss_start_time) 
-                    if self.target_loss_start_time else 0.0
-                ),
-                'last_valid_target_coords': self.last_valid_target_coords,
                 
                 # Safety Status
                 'emergency_stop_active': self.emergency_stop_active,
@@ -1748,12 +1607,6 @@ class MCVelocityChaseFollower(BaseFollower):
             if chase_status.get('auto_mode_switching_enabled', False):
                 chase_report += f"  Switch Velocity: {chase_status.get('mode_switch_velocity', 0.0):.1f} m/s\n"
             
-            # Target status
-            chase_report += f"\nTarget Status:\n"
-            chase_report += f"  Target Lost: {'✓' if chase_status.get('target_lost', False) else '✗'}\n"
-            if chase_status.get('target_lost', False):
-                chase_report += f"  Loss Duration: {chase_status.get('target_loss_duration', 0.0):.1f}s\n"
-            
             # Safety status
             chase_report += f"\nSafety Status:\n"
             chase_report += f"  Emergency Stop: {'✓' if chase_status.get('emergency_stop_active', False) else '✗'}\n"
@@ -1785,10 +1638,6 @@ class MCVelocityChaseFollower(BaseFollower):
             self.smoothed_right_velocity = 0.0
             self.smoothed_down_velocity = 0.0
             self.smoothed_yaw_speed = 0.0
-            
-            # Reset tracking state
-            self.target_lost = False
-            self.target_loss_start_time = None
             
             # Reset safety state
             self.emergency_stop_active = False
@@ -1935,20 +1784,19 @@ class MCVelocityChaseFollower(BaseFollower):
 
     # ==================== Enhanced Tracker Data Methods ====================
     
-    def _handle_target_loss_enhanced(self, target_coords: Tuple[float, float], tracker_data: TrackerOutput) -> bool:
-        """
-        Enhanced target loss detection with confidence analysis.
+    def _validate_command_measurement(self, target_coords: Tuple[float, float], tracker_data: TrackerOutput) -> bool:
+        """Validate profile-specific measurement limits without owning loss state.
         
         Args:
             target_coords (Tuple[float, float]): Target coordinates
             tracker_data (TrackerOutput): Structured tracker data with confidence
             
         Returns:
-            bool: True if target is valid, False if lost
+            bool: True when follower math may consume this confirmed evidence.
         """
         try:
-            # Use existing target loss logic first
-            basic_validity = self._handle_target_loss(target_coords)
+            if not self.validate_target_coordinates(target_coords):
+                return False
 
             # Enhance with confidence analysis if available (v5.7.1: configurable threshold)
             if tracker_data.confidence is not None:
@@ -1968,39 +1816,11 @@ class MCVelocityChaseFollower(BaseFollower):
                     logger.debug(f"Target velocity too high: {velocity_magnitude:.2f} > {self.max_reasonable_target_velocity}")
                     return False
 
-            return basic_validity
+            return True
             
         except Exception as e:
-            logger.error(f"Error in enhanced target loss detection: {e}")
-            return basic_validity if 'basic_validity' in locals() else False
-    
-    def _handle_tracking_failure(self) -> None:
-        """
-        Handles complete tracking failure by applying safe fallback behavior.
-        """
-        try:
-            logger.warning("Complete tracking failure detected - applying safe fallback")
-            
-            # Reduce forward velocity
-            self.current_forward_velocity *= 0.5
-            
-            # Continue with reduced forward velocity and zero lateral commands.
-            self.set_command_fields(
-                {
-                    'vel_body_fwd': self.current_forward_velocity,
-                    'vel_body_right': 0.0,
-                    'vel_body_down': 0.0,
-                    'yawspeed_deg_s': 0.0,
-                },
-                reason='mc_velocity_chase_tracking_failure',
-            )
-            
-            # Update telemetry
-            self.update_telemetry_metadata('tracking_failure', datetime.utcnow().isoformat())
-            
-        except Exception as e:
-            logger.error(f"Error handling tracking failure: {e}")
-            self.activate_emergency_stop()
+            logger.error(f"Command measurement validation failed: {e}")
+            return False
 
     # ==================== Schema-Driven Data Requirements ====================
     # 

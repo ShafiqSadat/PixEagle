@@ -46,7 +46,7 @@ test('shows unavailable for missing and nonfinite live command values while pres
 
 test('shows unavailable performance metrics without replacing genuine zero', () => {
   const { rerender } = renderCard({
-    target_loss_handler: { state: 'ACTIVE' },
+    continuity: { authority_state: 'ACTIVE', authority_fraction: 1 },
     performance: {
       success_rate_percent: Number.NaN,
       successful_transformations: undefined,
@@ -60,7 +60,7 @@ test('shows unavailable performance metrics without replacing genuine zero', () 
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <FollowerStatusCard
         followerData={{
-          target_loss_handler: { state: 'ACTIVE' },
+          continuity: { authority_state: 'ACTIVE', authority_fraction: 1 },
           performance: {
             success_rate_percent: 0,
             successful_transformations: 0,

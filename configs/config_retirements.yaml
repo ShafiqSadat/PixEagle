@@ -457,3 +457,94 @@ retirements:
     retired_in_schema_version: 1.6.0
     reason: The shared vision pipeline requires an 8-bit three-channel BGR frame; exposing a global color-space conversion could silently break trackers, OSD, and media encoders.
     replacement: null
+
+  - id: remove-follower-target-loss-timeout-v1
+    path: [Follower, General, TARGET_LOSS_TIMEOUT]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Target-loss authority is now owned by the shared TargetContinuity supervisor.
+    replacement: [TargetContinuity, MAX_COAST_TIME_S]
+
+  - id: remove-follower-target-loss-coordinate-threshold-v1
+    path: [Follower, General, TARGET_LOSS_COORDINATE_THRESHOLD]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Tracker evidence quality now owns target usability; followers no longer infer loss from coordinates.
+    replacement: null
+
+  - id: remove-mc-chase-target-loss-override-v1
+    path: [Follower, FollowerOverrides, MC_VELOCITY_CHASE, TARGET_LOSS_TIMEOUT]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Target-loss authority is now follower-independent.
+    replacement: [TargetContinuity, MAX_COAST_TIME_S]
+
+  - id: remove-mc-attitude-target-loss-override-v1
+    path: [Follower, FollowerOverrides, MC_ATTITUDE_RATE, TARGET_LOSS_TIMEOUT]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Target-loss authority is now follower-independent.
+    replacement: [TargetContinuity, MAX_COAST_TIME_S]
+
+  - id: remove-gm-chase-target-loss-handler-config-v1
+    path: [GM_VELOCITY_CHASE, TARGET_LOSS_HANDLING]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: The gimbal follower no longer owns a second target-loss state machine.
+    replacement: [TargetContinuity]
+
+  - id: remove-gm-vector-target-loss-decay-toggle-v1
+    path: [GM_VELOCITY_VECTOR, ENABLE_VELOCITY_DECAY]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Command decay is authorized only by the shared continuity strategy.
+    replacement: [TargetContinuity, MODE]
+
+  - id: remove-gm-vector-target-loss-decay-rate-v1
+    path: [GM_VELOCITY_VECTOR, VELOCITY_DECAY_RATE]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Command decay is authorized only by the shared continuity strategy.
+    replacement: [TargetContinuity]
+
+  - id: remove-mc-chase-target-loss-ramp-toggle-v1
+    path: [MC_VELOCITY_CHASE, RAMP_DOWN_ON_TARGET_LOSS]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Followers now produce nominal commands only; continuity owns loss behavior.
+    replacement: [TargetContinuity, MODE]
+
+  - id: remove-mc-chase-target-loss-stop-velocity-v1
+    path: [MC_VELOCITY_CHASE, TARGET_LOSS_STOP_VELOCITY]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Follower-local target-loss commands were replaced by the shared authority policy.
+    replacement: [TargetContinuity]
+
+  - id: remove-mc-attitude-target-loss-ramp-toggle-v1
+    path: [MC_ATTITUDE_RATE, RAMP_DOWN_ON_TARGET_LOSS]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Attitude-rate loss now requests immediate authority handoff.
+    replacement: [TargetContinuity, MODE]
+
+  - id: remove-fw-target-loss-orbit-radius-v1
+    path: [FW_ATTITUDE_RATE, ORBIT_RADIUS]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: PixEagle no longer synthesizes follower-local target-loss orbit commands.
+    replacement: [TargetContinuity, TERMINAL_ACTION]
+
+  - id: remove-global-target-loss-action-v1
+    path: [Safety, GlobalLimits, TARGET_LOSS_ACTION]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Safety envelopes limit commands; target-loss authority belongs to TargetContinuity.
+    replacement: [TargetContinuity, TERMINAL_ACTION]
+
+  - id: remove-fw-target-loss-action-override-v1
+    path: [Safety, FollowerOverrides, FW_ATTITUDE_RATE, TARGET_LOSS_ACTION]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Target-loss terminal action is no longer follower-specific.
+    replacement: [TargetContinuity, TERMINAL_ACTION]

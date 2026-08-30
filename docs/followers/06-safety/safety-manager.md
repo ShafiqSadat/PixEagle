@@ -118,7 +118,6 @@ Safety:
 
     FW_ATTITUDE_RATE:
       MAX_PITCH_RATE: 20.0         # Tighter fixed-wing rate
-      TARGET_LOSS_ACTION: orbit    # Vehicle-appropriate recovery
 
     GM_VELOCITY_CHASE:
       MAX_VELOCITY_FORWARD: 0.25   # Lower for gimbal-input mode

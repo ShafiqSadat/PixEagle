@@ -243,13 +243,13 @@ controller and API.
 
 When no frame reaches `update_loop()` and following is active,
 `FlowController` calls `AppController.handle_video_frame_unavailable()`. For
-vision trackers, the controller creates inactive fail-closed tracker output so
-followers that opt in can publish stop, hover, orbit, or other target-loss
-commands. For explicit non-video trackers such as external gimbal providers, the
-controller continues through the tracker-specific freshness contract instead of
-treating the video stall as a gimbal data failure. The non-video bypass is
-fail-closed by default: external trackers must explicitly declare
-`requires_video: false` in their capabilities.
+vision trackers, the controller publishes absent evidence to the shared target
+continuity supervisor; follower-local loss commands are not invoked. For
+explicit non-video trackers such as external gimbal providers, the controller
+continues through the tracker-specific freshness contract instead of treating
+the video stall as a gimbal data failure. The non-video bypass is fail-closed by
+default: external trackers must explicitly declare `requires_video: false`
+in their capabilities.
 
 ## Keyboard Commands
 

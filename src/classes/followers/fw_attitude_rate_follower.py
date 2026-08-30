@@ -9,8 +9,7 @@ from classes.followers.base_follower import BaseFollower
 from classes.followers.custom_pid import CustomPID
 from classes.parameters import Parameters
 from classes.follower_config_manager import get_follower_config_manager
-from classes.tracker_output import TrackerOutput, TrackerDataType
-from classes.safety_types import TargetLossAction  # authoritative enum — avoids cross-type == always False
+from classes.tracker_output import TrackerOutput
 import logging
 import numpy as np
 import math
@@ -38,13 +37,12 @@ class FWAttitudeRateFollower(BaseFollower):
     - TECS energy coordination instead of independent axes
     - Airspeed-based calculations instead of ground speed
     - Airspeed threshold handling
-    - Orbit behavior on target loss instead of hover
+    - Shared target-continuity handoff outside this follower
 
     Safety Features:
     - Stall-speed threshold response
     - Load factor limiting (structural protection)
     - Altitude envelope enforcement with RTL
-    - Target loss handling (orbit or RTL)
     - Thrust slew rate limiting
 
     References:
@@ -147,13 +145,6 @@ class FWAttitudeRateFollower(BaseFollower):
         self.stall_recovery_pitch = config.get('STALL_RECOVERY_PITCH', -5.0)
         self.stall_recovery_throttle = config.get('STALL_RECOVERY_THROTTLE', 1.0)
 
-        # === Target Loss Handling ===
-        self.target_loss_timeout = fcm.get_param('TARGET_LOSS_TIMEOUT', _fn)
-        # TARGET_LOSS_ACTION delegated to SafetyManager (GlobalLimits → FollowerOverrides)
-        self.target_loss_action = _safety_behavior.target_loss_action
-        self.orbit_radius = config.get('ORBIT_RADIUS', 100.0)
-        self.target_loss_coord_threshold = fcm.get_param('TARGET_LOSS_COORDINATE_THRESHOLD', _fn)
-
         # === Performance Tuning (from FollowerConfigManager) ===
         self.control_update_rate = fcm.get_param('CONTROL_UPDATE_RATE', _fn)
         self.enable_command_smoothing = fcm.get_param('COMMAND_SMOOTHING_ENABLED', _fn)
@@ -174,7 +165,7 @@ class FWAttitudeRateFollower(BaseFollower):
         self.update_telemetry_metadata('energy_control', 'TECS')
         self.update_telemetry_metadata('safety_features', [
             'stall_protection', 'load_factor_limiting', 'altitude_safety',
-            'target_loss_orbit', 'thrust_slew_limiting'
+            'thrust_slew_limiting'
         ])
 
         logger.info(f"FWAttitudeRateFollower initialized with L1 navigation and TECS")
@@ -185,13 +176,6 @@ class FWAttitudeRateFollower(BaseFollower):
 
     def _init_state_variables(self) -> None:
         """Initialize all state variables for fixed-wing following."""
-        # Target tracking state
-        self.target_lost = False
-        self.target_loss_start_time = None
-        self.last_valid_target_coords = None
-        self.orbit_mode_active = False
-        self.orbit_start_time = None
-
         # Stall protection state
         self.stall_warning_active = False
         self.stall_recovery_active = False
@@ -696,100 +680,6 @@ class FWAttitudeRateFollower(BaseFollower):
 
     # _trigger_rtl() is inherited from BaseFollower (WP9 consolidation)
 
-    # ==================== Target Loss Handling ====================
-
-    def _handle_target_loss(self, target_coords: Tuple[float, float]) -> bool:
-        """
-        Handle target loss detection and execute appropriate action.
-
-        Args:
-            target_coords (Tuple[float, float]): Current target coordinates.
-
-        Returns:
-            bool: True if target is valid, False if lost.
-        """
-        current_time = time.time()
-
-        # Check if target is valid
-        threshold = self.target_loss_coord_threshold
-        is_valid = (
-            self.validate_target_coordinates(target_coords) and
-            not (np.isnan(target_coords[0]) or np.isnan(target_coords[1])) and
-            not (abs(target_coords[0]) > threshold or abs(target_coords[1]) > threshold)
-        )
-
-        if is_valid:
-            if self.target_lost:
-                logger.info("Target reacquired after loss")
-                self.orbit_mode_active = False
-            self.target_lost = False
-            self.target_loss_start_time = None
-            self.last_valid_target_coords = target_coords
-            return True
-
-        # Target is lost
-        if not self.target_lost:
-            self.target_lost = True
-            self.target_loss_start_time = current_time
-            logger.warning(f"Target lost at coordinates: {target_coords}")
-
-        loss_duration = current_time - self.target_loss_start_time
-
-        if loss_duration > self.target_loss_timeout:
-            logger.warning(f"Target loss timeout ({loss_duration:.1f}s) - executing {self.target_loss_action.value}")
-            self._execute_target_loss_action()
-
-        return False
-
-    def _execute_target_loss_action(self) -> None:
-        """Execute the configured target loss action."""
-        if self.target_loss_action == TargetLossAction.ORBIT:
-            self._execute_orbit()
-        elif self.target_loss_action == TargetLossAction.RTL:
-            self._trigger_rtl("target_loss_timeout")
-        elif self.target_loss_action == TargetLossAction.CONTINUE:
-            # Continue with last valid target (do nothing special)
-            logger.info("Continuing with last valid target position")
-
-    def _execute_orbit(self) -> None:
-        """
-        Execute orbit/loiter behavior on target loss.
-
-        Commands a constant-rate turn to maintain position.
-        """
-        if not self.orbit_mode_active:
-            self.orbit_mode_active = True
-            self.orbit_start_time = time.time()
-            logger.info(f"Entering orbit mode with radius {self.orbit_radius}m")
-
-        # Calculate orbit turn rate
-        airspeed = self._get_current_airspeed()
-        safe_airspeed = max(airspeed, self.min_airspeed)
-
-        # Turn rate for given radius: omega = V / R
-        orbit_yaw_rate = math.degrees(safe_airspeed / self.orbit_radius)
-        orbit_yaw_rate = min(orbit_yaw_rate, self.max_yaw_rate)
-
-        # Calculate coordinated bank for orbit
-        orbit_bank = self._calculate_coordinated_bank_angle(orbit_yaw_rate, safe_airspeed)
-        roll_rate = self._calculate_roll_rate(orbit_bank, self._get_current_roll())
-
-        if not self.set_command_fields(
-            {
-                'rollspeed_deg_s': roll_rate,
-                'pitchspeed_deg_s': 0.0,
-                'yawspeed_deg_s': orbit_yaw_rate,
-                'thrust': self.cruise_thrust,
-            },
-            reason='fw_attitude_rate_orbit',
-        ):
-            raise RuntimeError("Failed to apply fixed-wing orbit command intent")
-
-        self.log_follower_event('orbit_mode',
-                               yaw_rate=orbit_yaw_rate,
-                               bank_angle=orbit_bank,
-                               duration=time.time() - self.orbit_start_time)
-
     # ==================== Helper Methods ====================
 
     def _get_current_airspeed(self) -> float:
@@ -919,28 +809,15 @@ class FWAttitudeRateFollower(BaseFollower):
             bool: True if following executed successfully, False otherwise.
         """
         try:
-            inactive_output = self.should_process_inactive_tracker_output(tracker_data)
-
             # Validate tracker compatibility (errors are logged by base class with rate limiting)
-            if (
-                not self.validate_tracker_compatibility(tracker_data) and
-                not inactive_output
-            ):
+            if not self.validate_tracker_compatibility(tracker_data):
                 return False
-
-            if inactive_output:
-                return self._handle_inactive_tracker_output()
 
             # Extract target coordinates
             target_coords = self.extract_target_coordinates(tracker_data)
             if not target_coords:
                 logger.warning("No valid target coordinates in tracker data")
                 return False
-
-            # Handle target loss
-            if not self._handle_target_loss(target_coords):
-                # Target lost - orbit or other action already being executed
-                return bool(self.target_lost and not getattr(self, 'rtl_triggered', False))
 
             # Check stall protection
             if not self._check_stall_protection():
@@ -957,9 +834,7 @@ class FWAttitudeRateFollower(BaseFollower):
 
             # Update telemetry
             self.update_telemetry_metadata('last_target_coords', target_coords)
-            self.update_telemetry_metadata('orbit_mode_active', self.orbit_mode_active)
             self.update_telemetry_metadata('stall_warning', self.stall_warning_active)
-            self.update_telemetry_metadata('target_lost', self.target_lost)
 
             logger.debug(f"Fixed-wing following executed for target: {target_coords}")
             return True
@@ -980,83 +855,6 @@ class FWAttitudeRateFollower(BaseFollower):
             logger.error(f"Unexpected error in {self.__class__.__name__}.follow_target(): {e}")
             self.reset_command_fields()
             return False
-
-    def _handle_inactive_tracker_output(self) -> bool:
-        """Apply fixed-wing target-loss policy without normal pursuit math."""
-        current_time = time.time()
-        if not getattr(self, 'target_lost', False):
-            self.target_lost = True
-            self.target_loss_start_time = current_time
-            logger.warning("Inactive tracker output received - entering target-loss policy")
-
-        loss_duration = current_time - self.target_loss_start_time
-        self._execute_inactive_target_loss_action(loss_duration)
-
-        self.update_telemetry_metadata('target_lost', True)
-        self.update_telemetry_metadata('target_loss_duration', loss_duration)
-        return not getattr(self, 'rtl_triggered', False)
-
-    def _execute_inactive_target_loss_action(self, loss_duration: float) -> None:
-        """
-        Write a deterministic safe fixed-wing command for stale/inactive input.
-
-        Inactive output can be caused by cached frames or prediction-only target
-        state. Re-sending the previous pursuit command is not acceptable, so the
-        configured target-loss action is applied immediately.
-        """
-        if self.target_loss_action == TargetLossAction.ORBIT:
-            self._execute_orbit()
-        elif self.target_loss_action == TargetLossAction.RTL:
-            if not getattr(self, 'rtl_triggered', False):
-                self._trigger_rtl("inactive_tracker_output")
-        elif self.target_loss_action == TargetLossAction.CONTINUE:
-            self._set_wings_level_cruise_command()
-            logger.warning(
-                "Fixed-wing target-loss action CONTINUE received inactive input; "
-                "publishing wings-level cruise command instead of stale pursuit"
-            )
-        else:
-            self._set_wings_level_cruise_command()
-            logger.warning(
-                "Unknown fixed-wing target-loss action %s after %.1fs; "
-                "publishing wings-level cruise command",
-                self.target_loss_action,
-                loss_duration,
-            )
-
-    def _set_wings_level_cruise_command(self) -> None:
-        """Publish a conservative wings-level cruise command."""
-        if not self.set_command_fields(
-            {
-                'rollspeed_deg_s': 0.0,
-                'pitchspeed_deg_s': 0.0,
-                'yawspeed_deg_s': 0.0,
-                'thrust': self.cruise_thrust,
-            },
-            reason='fw_attitude_rate_wings_level_cruise',
-        ):
-            raise RuntimeError("Failed to apply fixed-wing cruise command intent")
-        self.orbit_mode_active = False
-        self.last_thrust_command = self.cruise_thrust
-        self.last_command_time = time.time()
-
-    def should_process_inactive_tracker_output(self, tracker_data: TrackerOutput) -> bool:
-        """
-        Allow inactive position outputs to publish fixed-wing target-loss commands.
-
-        Inactive tracker output must not run normal pursuit math even when it
-        carries last-known valid coordinates.
-        """
-        return self._is_inactive_tracker_output(
-            tracker_data,
-            allowed_types={
-                TrackerDataType.POSITION_2D,
-                TrackerDataType.POSITION_3D,
-                TrackerDataType.BBOX_CONFIDENCE,
-                TrackerDataType.VELOCITY_AWARE,
-                TrackerDataType.MULTI_TARGET,
-            },
-        )
 
     # ==================== Telemetry and Status ====================
 
@@ -1097,12 +895,6 @@ class FWAttitudeRateFollower(BaseFollower):
                 'stall_recovery_active': self.stall_recovery_active,
                 'altitude_violation_count': self.altitude_violation_count,
                 'rtl_triggered': self.rtl_triggered,
-
-                # Target State
-                'target_lost': self.target_lost,
-                'orbit_mode_active': self.orbit_mode_active,
-                'target_loss_duration': (time.time() - self.target_loss_start_time)
-                                        if self.target_loss_start_time else 0.0,
 
                 # Configuration
                 'configuration': {
@@ -1153,10 +945,6 @@ class FWAttitudeRateFollower(BaseFollower):
             report += f"  Stall Warning: {'ACTIVE' if status.get('stall_warning_active') else 'Clear'}\n"
             report += f"  Stall Recovery: {'ACTIVE' if status.get('stall_recovery_active') else 'Inactive'}\n"
             report += f"  RTL Triggered: {'YES' if status.get('rtl_triggered') else 'No'}\n"
-
-            report += f"\nTarget Status:\n"
-            report += f"  Target Lost: {'YES' if status.get('target_lost') else 'No'}\n"
-            report += f"  Orbit Mode: {'ACTIVE' if status.get('orbit_mode_active') else 'Inactive'}\n"
 
             report += f"{'='*60}\n"
             return report

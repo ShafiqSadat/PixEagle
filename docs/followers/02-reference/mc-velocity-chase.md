@@ -16,7 +16,7 @@ The MC Velocity Chase Follower is designed for pursuit scenarios where the drone
 - Dual-mode lateral guidance (sideslip vs coordinated turn)
 - Adaptive dive/climb control (optional)
 - Pitch compensation for camera stabilization
-- Comprehensive target loss handling
+- Shared target-continuity authority and handoff
 
 This is the multicopter profile that ramps forward velocity. The
 `mc_velocity_position` profile intentionally holds forward/right velocity at
@@ -34,7 +34,8 @@ Uses ramping rather than PID for smooth acceleration:
 v_fwd(t) = min(v_fwd(t-1) + ramp_rate * dt, max_forward_velocity)
 ```
 
-On target loss, velocity ramps down to `TARGET_LOSS_STOP_VELOCITY`.
+Loss and recovery authority is handled after nominal follower math by the
+shared target-continuity supervisor.
 
 ### Lateral Guidance Modes
 
@@ -87,12 +88,6 @@ MC_VELOCITY_CHASE:
 
   # Vertical Control
   ENABLE_ALTITUDE_CONTROL: true
-
-  # Target Loss Handling
-  RAMP_DOWN_ON_TARGET_LOSS: true
-  TARGET_LOSS_TIMEOUT: 2.0         # seconds
-  TARGET_LOSS_STOP_VELOCITY: 0.0   # m/s - hover on loss
-  TARGET_LOSS_COORDINATE_THRESHOLD: 990
 
   # Tracking validity (hard motion/altitude protections live in Safety)
   MAX_TRACKING_ERROR: 1.5          # normalized coords
@@ -193,7 +188,9 @@ Applied to vertical error before PID processing.
 **Required**: `POSITION_2D`
 **Optional**: `BBOX_CONFIDENCE`, `VELOCITY_AWARE`
 
-Confidence below threshold triggers target loss handling.
+Unusable confidence is normalized as non-confirmed evidence and bypasses
+follower command calculation. See
+[Target Continuity](../06-safety/target-continuity.md).
 
 ---
 

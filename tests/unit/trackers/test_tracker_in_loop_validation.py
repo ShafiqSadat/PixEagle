@@ -5,7 +5,7 @@ import math
 from pathlib import Path
 import time
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -14,6 +14,12 @@ from classes.followers.gm_velocity_vector_follower import GMVelocityVectorFollow
 from classes.followers.mc_velocity_position_follower import MCVelocityPositionFollower
 from classes.followers.yaw_rate_smoother import YawRateSmoother
 from classes.setpoint_handler import SetpointHandler
+from classes.target_continuity import (
+    AirframePhase,
+    ContinuityContext,
+    ContinuityPolicy,
+    TargetContinuitySupervisor,
+)
 from classes.tracker_trace import write_trace_jsonl
 from tests.fixtures.synthetic_tracker_scene import (
     ColorBlobTrackerProbe,
@@ -151,6 +157,25 @@ def _build_app_controller_stub(follower, *, external_tracker: bool = False):
             "timestamp": time.time(),
         }
     )
+    controller._tracking_session_generation = 1
+    controller.target_continuity = TargetContinuitySupervisor(
+        ContinuityPolicy.from_mapping({})
+    )
+    controller.target_continuity.reset_session(
+        session_epoch=controller._tracking_session_generation,
+        reason="tracker_in_loop_test",
+    )
+    controller._build_target_continuity_context = MagicMock(
+        return_value=ContinuityContext(
+            execution_mode="COMMAND_PREVIEW",
+            airframe_phase=AirframePhase.MULTICOPTER,
+            control_type=follower.get_control_type(),
+            vehicle_state_fresh=True,
+            offboard_active=True,
+            publisher_healthy=True,
+        )
+    )
+    controller._execute_target_continuity_handoff = AsyncMock()
     return controller, commander
 
 
@@ -203,7 +228,7 @@ def test_synthetic_tracker_output_drives_position_follower_command_intent():
 
 
 @pytest.mark.asyncio
-async def test_synthetic_occlusion_keeps_output_visible_but_not_usable_for_following():
+async def test_synthetic_occlusion_requests_authority_handoff_without_follower_command():
     scene = SyntheticTargetScene.from_clip_manifest(CLIP_FIXTURE)
     tracker = ColorBlobTrackerProbe(video_handler=synthetic_video_handler())
     tracker.start_tracking(scene[0].frame, scene[0].bbox)
@@ -224,24 +249,15 @@ async def test_synthetic_occlusion_keeps_output_visible_but_not_usable_for_follo
 
     follower = _build_position_follower_stub()
     controller, commander = _build_app_controller_stub(follower)
-    assert await controller._follow_tracker_output(output) is True
+    assert await controller._follow_tracker_output(output) is False
 
-    assert len(commander.intents) == 1
-    intent = commander.intents[0]
-    assert intent.reason == "mc_velocity_position_inactive_hold"
-    assert intent.fields == {
-        "vel_body_fwd": 0.0,
-        "vel_body_right": 0.0,
-        "vel_body_down": 0.0,
-        "yawspeed_deg_s": 0.0,
-    }
-    assert follower._telemetry_metadata["target_valid"] is False
-    assert follower._telemetry_metadata["target_lost"] is True
-    assert follower._telemetry_metadata["control_active"] is False
+    assert commander.intents == []
+    assert follower._control_statistics["commands_sent"] == 0
+    controller._execute_target_continuity_handoff.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_sitl_validation_injection_uses_existing_target_loss_path():
+async def test_sitl_validation_injection_reports_continuity_handoff():
     scene = SyntheticTargetScene.from_clip_manifest(CLIP_FIXTURE)
     tracker = ColorBlobTrackerProbe(video_handler=synthetic_video_handler())
     tracker.start_tracking(scene[0].frame, scene[0].bbox)
@@ -259,15 +275,18 @@ async def test_sitl_validation_injection_uses_existing_target_loss_path():
 
     assert result["status"] == "accepted"
     assert result["accepted"] is True
+    assert result["dispatch_accepted"] is False
     assert result["injection"]["source"] == "unit_test.sitl_target_loss"
     assert result["injection"]["input_tracking_active"] is True
     assert result["injection"]["processed_tracking_active"] is False
     assert result["injection"]["processed_usable_for_following"] is False
-    assert result["command_intent"]["reason"] == "mc_velocity_position_inactive_hold"
+    assert result["command_intent"] is None
     assert result["offboard_commander"]["exists"] is True
     assert result["offboard_commander"]["running"] is True
     assert result["offboard_commander"]["command_publication_source"] == "offboard_commander"
-    assert len(commander.intents) == 1
+    assert result["continuity"]["authority_state"] == "HANDOFF_PENDING"
+    assert commander.intents == []
+    controller._execute_target_continuity_handoff.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -289,7 +308,9 @@ async def test_sitl_validation_injection_refuses_when_following_is_inactive():
 
     assert result["status"] == "rejected"
     assert result["accepted"] is False
+    assert result["dispatch_accepted"] is False
     assert result["reason"] == "following_not_active"
+    assert result["continuity"] is None
     assert len(commander.intents) == 0
 
 
@@ -317,7 +338,7 @@ def test_active_gimbal_replay_drives_vector_follower_command_intent():
 
 
 @pytest.mark.asyncio
-async def test_gimbal_replay_unusable_output_zeroes_vector_follower_command():
+async def test_gimbal_replay_unusable_output_requests_authority_handoff():
     stale_output = GimbalReplaySample(
         yaw_deg=12.0,
         pitch_deg=-8.0,
@@ -328,23 +349,14 @@ async def test_gimbal_replay_unusable_output_zeroes_vector_follower_command():
     follower = _build_gimbal_vector_follower_stub()
     controller, commander = _build_app_controller_stub(follower, external_tracker=True)
 
-    assert follower.should_process_inactive_tracker_output(stale_output) is True
-    assert await controller._follow_tracker_output(stale_output) is True
+    assert await controller._follow_tracker_output(stale_output) is False
 
-    assert len(commander.intents) == 1
-    intent = commander.intents[0]
-    assert intent is not None
-    assert intent.reason == "gm_velocity_vector_unusable_external_input"
-    assert intent.fields == {
-        "vel_body_fwd": 0.0,
-        "vel_body_right": 0.0,
-        "vel_body_down": 0.0,
-        "yawspeed_deg_s": 0.0,
-    }
-    assert follower.current_velocity_magnitude == 0.0
-    assert follower.following_active is False
-    assert follower.total_follow_calls == 1
-    follower.log_follower_event.assert_called_once()
+    assert commander.intents == []
+    assert follower.current_velocity_magnitude == 1.25
+    assert follower.following_active is True
+    assert follower.total_follow_calls == 0
+    follower.log_follower_event.assert_not_called()
+    controller._execute_target_continuity_handoff.assert_awaited_once()
 
 
 @pytest.mark.asyncio

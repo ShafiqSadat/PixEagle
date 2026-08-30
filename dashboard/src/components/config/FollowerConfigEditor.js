@@ -24,7 +24,7 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, Info, Speed, Height, Tune,
-  GpsOff, Navigation, RotateRight,
+  Navigation, RotateRight,
   KeyboardArrowDown, KeyboardArrowUp
 } from '@mui/icons-material';
 
@@ -43,7 +43,6 @@ import {
 const categoryIcons = {
   timing: <Speed fontSize="small" color="primary" />,
   smoothing: <Tune fontSize="small" color="info" />,
-  target_loss: <GpsOff fontSize="small" color="error" />,
   guidance: <Navigation fontSize="small" color="warning" />,
   altitude: <Height fontSize="small" color="success" />,
   yaw_smoothing: <RotateRight fontSize="small" color="secondary" />

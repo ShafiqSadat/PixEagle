@@ -114,6 +114,7 @@ class Parameters(metaclass=_ParametersMeta):
     # Grouped sections that should NOT be flattened
     _GROUPED_SECTIONS = [
         'Safety',        # Unified safety config (v5.0.0+)
+        'TargetContinuity', # Shared target-evidence command-authority policy
         'TrackerSafety', # Boundary behavior is consumed as one tracker policy
         # Per-follower sections (unique params only)
         'MC_VELOCITY_POSITION', 'MC_VELOCITY_DISTANCE', 'MC_VELOCITY_GROUND',
@@ -454,6 +455,16 @@ class Parameters(metaclass=_ParametersMeta):
         except Exception as exc:
             failures.append(f"safety-critical config validation failed: {exc}")
             logger.warning("Could not validate safety config: %s", exc)
+
+        try:
+            from classes.target_continuity import ContinuityPolicy
+
+            ContinuityPolicy.from_mapping(
+                normalized_config.get("TargetContinuity")
+            )
+        except Exception as exc:
+            failures.append(f"target-continuity config validation failed: {exc}")
+            logger.warning("Could not validate target-continuity config: %s", exc)
 
         if strict and failures:
             raise RuntimeError("; ".join(failures))

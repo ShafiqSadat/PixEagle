@@ -48,11 +48,12 @@ SetpointHandler is the abstraction layer between followers and the autopilot int
 The schema is loaded from `configs/follower_commands.yaml`:
 
 ```yaml
-schema_version: "2.0.0"
+schema_version: "2.1.0"
 
 follower_profiles:
   mc_velocity_chase:
     control_type: "velocity_body_offboard"
+    airframe_phase: "multicopter"
     display_name: "MC Velocity Chase"
     description: "Quadcopter chase using body velocity with forward ramp-up"
     required_fields:

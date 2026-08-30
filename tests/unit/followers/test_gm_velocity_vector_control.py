@@ -285,8 +285,8 @@ def test_horizontal_only_exact_speed_symmetric_vector():
     )
 
 
-def test_unusable_external_gimbal_output_zeroes_commands_immediately():
-    """Stale/inactive external gimbal data must not coast on old velocity."""
+def test_unusable_external_gimbal_output_produces_no_nominal_command():
+    """Stale evidence is rejected for the shared authority owner to handle."""
     follower = _build_follower_stub(
         enable_altitude_control=False,
         current_velocity_magnitude=4.0,
@@ -316,14 +316,8 @@ def test_unusable_external_gimbal_output_zeroes_commands_immediately():
         metadata={'usable_for_following': False},
     )
 
-    assert follower.follow_target(tracker_data) is True
-
-    cmds = follower.set_command_fields.call_args.args[0]
-    assert cmds["vel_body_fwd"] == 0.0
-    assert cmds["vel_body_right"] == 0.0
-    assert cmds["vel_body_down"] == 0.0
-    assert cmds["yawspeed_deg_s"] == 0.0
-    assert follower.current_velocity_magnitude == 0.0
-    assert follower.last_velocity_vector is None
-    assert follower.following_active is False
-    assert follower.failed_updates == 1
+    assert follower.follow_target(tracker_data) is False
+    follower.set_command_fields.assert_not_called()
+    assert follower.current_velocity_magnitude == 4.0
+    assert follower.last_velocity_vector == Vector3D(4.0, 0.0, 0.0)
+    assert follower.following_active is True

@@ -303,48 +303,6 @@ class TestBaseFollowerCompatibilityFailClosed:
         stub._error_aggregator.record_error.assert_called_once()
 
 
-class TestBaseFollowerTrackerFreshness:
-    """All follower target-loss opt-ins use the shared freshness contract."""
-
-    @staticmethod
-    def _stub():
-        from classes.followers.mc_velocity_chase_follower import MCVelocityChaseFollower
-
-        return MCVelocityChaseFollower.__new__(MCVelocityChaseFollower)
-
-    @staticmethod
-    def _output(*, active=True, stale=False, prediction_only=False):
-        return TrackerOutput(
-            data_type=TrackerDataType.POSITION_2D,
-            timestamp=time.time(),
-            tracking_active=active,
-            position_2d=(0.1, -0.2),
-            raw_data={
-                "has_output": True,
-                "usable_for_following": active and not stale and not prediction_only,
-                "data_is_stale": stale,
-                "prediction_only": prediction_only,
-            },
-        )
-
-    def test_measured_active_output_is_not_an_inactive_control_input(self):
-        stub = self._stub()
-
-        assert stub._is_inactive_tracker_output(self._output()) is False
-
-    def test_prediction_only_active_output_is_handled_as_target_loss(self):
-        stub = self._stub()
-
-        assert stub._is_inactive_tracker_output(
-            self._output(prediction_only=True),
-        ) is True
-
-    def test_inactive_output_remains_fail_closed(self):
-        stub = self._stub()
-
-        assert stub._is_inactive_tracker_output(self._output(active=False)) is True
-
-
 # =============================================================================
 # Test: Tracker Data Extraction
 # =============================================================================

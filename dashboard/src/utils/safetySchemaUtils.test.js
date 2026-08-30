@@ -14,7 +14,7 @@ const globalSchema = {
       unit: 'm/s',
       description: 'Contract velocity limit',
     },
-    TARGET_LOSS_ACTION: {
+    VIOLATION_RESPONSE: {
       type: 'string',
       default: 'stop',
       options: [
@@ -39,7 +39,7 @@ test('uses backend safety bounds, defaults, enums, and required fields', () => {
     step: 0.25,
     unit: 'm/s',
   });
-  expect(contract.getPropertyByName('TARGET_LOSS_ACTION').options).toEqual([
+  expect(contract.getPropertyByName('VIOLATION_RESPONSE').options).toEqual([
     { value: 'stop', label: 'Stop now' },
     { value: 'rtl', label: 'Return home' },
   ]);

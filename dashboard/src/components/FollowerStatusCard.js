@@ -45,14 +45,25 @@ const formatPerformanceRate = (value) => (
   isFiniteNumber(value) ? `${value.toFixed(1)}%` : EMPTY_VALUE
 );
 
-const formatDuration = (value) => (
-  isFiniteNumber(value) ? `${value.toFixed(1)}s` : EMPTY_VALUE
-);
-
 const formatIntentReason = (value) => {
   if (typeof value !== 'string' || !value.trim()) return null;
   const normalized = value.trim().replace(/_/g, ' ');
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const getContinuityStateInfo = (state) => {
+  switch (state) {
+    case 'ACTIVE':
+      return { icon: <CheckCircle fontSize="small" />, color: 'success.main', label: 'Active' };
+    case 'COASTING':
+      return { icon: <Pause fontSize="small" />, color: 'warning.main', label: 'Coasting' };
+    case 'REACQUIRING':
+      return { icon: <PlayArrow fontSize="small" />, color: 'info.main', label: 'Reacquiring' };
+    case 'HANDOFF_PENDING':
+      return { icon: <Error fontSize="small" />, color: 'error.main', label: 'Handoff pending' };
+    default:
+      return { icon: <Info fontSize="small" />, color: 'text.secondary', label: 'Inactive' };
+  }
 };
 
 const LoadingSkeleton = () => (
@@ -389,58 +400,37 @@ const FollowerStatusCard = memo(({ followerData = {} }) => {
           </Box>
         )}
 
-        {/* Target Loss and Safety Status - Enhanced for gimbal followers */}
-        {isEngaged && followerData.target_loss_handler && (
+        {/* Shared command-authority and safety status */}
+        {isEngaged && (
+          followerData.continuity
+          || followerData.safety_systems
+          || followerData.circuit_breaker_active
+          || followerData.performance
+        ) && (
           <Box sx={{ mt: 2, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="caption" color="textSecondary" sx={{ mb: 1, display: 'block' }}>
-              🛡️ Target Loss & Safety:
-            </Typography>
-
-            {/* Target Loss State */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-              {(() => {
-                const state = followerData.target_loss_handler.state;
-                const getStateInfo = (state) => {
-                  switch (state) {
-                    case 'ACTIVE':
-                      return { icon: <CheckCircle fontSize="small" />, color: 'success.main', label: 'Active' };
-                    case 'LOST':
-                      return { icon: <Warning fontSize="small" />, color: 'warning.main', label: 'Target Lost' };
-                    case 'TIMEOUT':
-                      return { icon: <Error fontSize="small" />, color: 'error.main', label: 'Timeout' };
-                    case 'RECOVERING':
-                      return { icon: <PlayArrow fontSize="small" />, color: 'info.main', label: 'Recovering' };
-                    default:
-                      return { icon: <Info fontSize="small" />, color: 'textSecondary', label: state || 'Unknown' };
-                  }
-                };
-                const { icon, color, label } = getStateInfo(state);
-                return (
-                  <>
-                    <Box sx={{ color }}>{icon}</Box>
-                    <Typography variant="caption" sx={{ minWidth: 60 }}>
-                      Target:
-                    </Typography>
-                    <Typography variant="caption" fontFamily="monospace" color={color} fontWeight="bold">
-                      {label}
-                    </Typography>
-                  </>
-                );
-              })()}
-            </Box>
-
-            {/* Velocity Continuation */}
-            {followerData.target_loss_handler.velocity_continuation_active && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                <Pause fontSize="small" color="warning" />
-                <Typography variant="caption" sx={{ minWidth: 60 }}>
-                  Continue:
-                </Typography>
-                <Typography variant="caption" fontFamily="monospace" color="warning.main">
-                  {formatDuration(followerData.target_loss_handler.timeout_remaining)}
-                </Typography>
-              </Box>
-            )}
+            {followerData.continuity && (() => {
+              const continuity = followerData.continuity;
+              const { icon, color, label } = getContinuityStateInfo(continuity.authority_state);
+              const showFraction = isFiniteNumber(continuity.authority_fraction)
+                && continuity.authority_state !== 'ACTIVE';
+              return (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                  <Box sx={{ color }}>{icon}</Box>
+                  <Typography variant="caption" sx={{ minWidth: 116 }}>
+                    Command authority:
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    fontFamily="monospace"
+                    color={color}
+                    fontWeight="bold"
+                    title={formatIntentReason(continuity.reason_code) || undefined}
+                  >
+                    {label}{showFraction ? ` ${Math.round(continuity.authority_fraction * 100)}%` : ''}
+                  </Typography>
+                </Box>
+              );
+            })()}
 
             {/* Safety Systems Status */}
             {followerData.safety_systems && (

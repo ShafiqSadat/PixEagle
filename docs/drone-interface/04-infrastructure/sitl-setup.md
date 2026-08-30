@@ -414,7 +414,8 @@ single-frame or duplicate-only frame hash files, empty/unparseable JSONL traces,
 missing timing evidence in traces, missing Gazebo container inspection, and
 missing Docker image repo digests. Strict tracker-command and Offboard-publish
 records are also checked against `configs/follower_commands.yaml` version
-`2.0.0`: `profile_name` must be active, `control_type` must match that profile,
+`2.1.0`: `profile_name` must be active, `control_type` and `airframe_phase`
+must match that profile,
 and `fields` must be the exact complete profile field set with finite numeric
 values. Retired `velocity_body` controls and retired fields such as `vel_x`,
 `vel_y`, `vel_z`, and `yaw_rate` invalidate the evidence. A file existing at the
@@ -571,11 +572,11 @@ Do not enable this flag outside an operator-approved validation stack. The
 routes are disabled by default and refuse to dispatch unless PixEagle is
 already in the required follow-mode state.
 
-The checked-in Phase 2 target-loss scenario currently assumes
-`Follower.FOLLOWER_MODE=mc_velocity_position` so it can assert the exact
-fail-closed hold command fields (`vel_body_down=0.0` and
-`yawspeed_deg_s=0.0`). Other follower modes need their own scenario assertions
-before their target-loss runtime evidence can be accepted.
+The checked-in Phase 2 target-loss scenario requires
+`TargetContinuity.MODE=immediate_handoff`. It asserts that stale or
+prediction-only evidence produces no accepted follower command, stops local
+following, and records a confirmed handoff. PX4-observed mode evidence still
+requires the run artifacts below.
 
 Probe:
 
@@ -648,19 +649,18 @@ operator-approved SITL stack with no real aircraft connected.
 
 The target-loss scenario uses the validation-only
 `POST /api/v1/sitl/injections/tracker-output` route to inject an unusable
-`TrackerOutput` through the same command-freshness, follower, and
-OffboardCommander boundary used by live tracking. The plan asserts the
-resulting command intent, zero/hold fields, and active commander state rather
-than treating request acceptance alone as evidence.
+`TrackerOutput` through the same evidence and command-authority boundary
+used by live tracking. The plan distinguishes accepted stimulus from accepted
+dispatch and asserts the continuity handoff result rather than treating request
+acceptance alone as evidence.
 
 The video-stall scenario uses the validation-only
 `POST /api/v1/sitl/injections/video-stall` route to inject frame-status
 metadata into `AppController.handle_video_frame_unavailable()`. This proves the
 frame-unavailable fail-closed path without stopping the actual camera,
 GStreamer pipeline, Docker container, PX4 process, or MAVLink route. The plan
-asserts the same hold command fields and active commander state for the
-`mc_velocity_position` profile both in the injection response and in a
-post-stall `/api/follower/setpoints-status` probe.
+asserts no stale command dispatch, a confirmed continuity handoff, and inactive
+typed following status after the stall.
 
 The commander publish-failure scenario uses the validation-only
 `POST /api/v1/sitl/injections/commander-publish-failure` route to record

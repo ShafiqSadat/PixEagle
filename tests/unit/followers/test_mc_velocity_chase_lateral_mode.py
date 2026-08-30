@@ -82,9 +82,6 @@ def test_forward_velocity_ramps_toward_chase_speed():
     """The chase profile, unlike the stationary position profile, commands forward motion."""
     follower = MCVelocityChaseFollower.__new__(MCVelocityChaseFollower)
     follower.emergency_stop_active = False
-    follower.target_lost = False
-    follower.ramp_down_on_target_loss = True
-    follower.target_loss_stop_velocity = 0.0
     follower.max_forward_velocity = 8.0
     follower.forward_ramp_rate = 2.0
     follower.forward_velocity_deadzone = 0.01

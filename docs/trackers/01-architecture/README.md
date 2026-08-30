@@ -121,17 +121,16 @@ decision for classic, Smart/AI, and external tracker output.
 `AppController.follow_target()` enforces that decision, plus
 `VideoHandler.get_frame_status()`, before follower dispatch. Cached frames and
 prediction-only target states are converted into inactive fail-closed tracker
-output. Followers must explicitly opt in through
-`should_process_inactive_tracker_output()` before they can publish a stop,
-hover, orbit, or other target-loss command.
+output. Unusable evidence bypasses follower command calculation and enters the
+shared `TargetContinuitySupervisor`; followers never publish loss commands.
 
 `SmartTracker` applies the same contract to TrackingStateManager output:
 confirmed detections are command-usable, while tentative or prediction-only
 states remain visible for overlays but set `data_is_stale` and
 `usable_for_following: false`. If other detections keep the output type as
-`MULTI_TARGET`, inactive follower dispatch still uses only explicit stop, hold,
-hover, or orbit target-loss commands. `GimbalTracker` keeps angle telemetry
-visible only when provider data is fresh; a fresh angle packet without a fresh
+`MULTI_TARGET`, selected-target evidence remains unusable until identity is
+confirmed. `GimbalTracker` keeps angle telemetry visible only when provider data
+is fresh; a fresh angle packet without a fresh
 tracking status clears internal active state so following cannot continue from
 stale tracking status.
 

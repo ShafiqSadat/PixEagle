@@ -994,13 +994,11 @@ Follower:
   # === General Follower Defaults (v6.1.0+) ===
   # Single source of truth for shared follower operational parameters.
   # Per-follower differences go in FollowerOverrides below (sparse overrides only).
-  # Resolution: FollowerOverrides → General → Hardcoded Fallback
+  # Resolution: FollowerOverrides -> General; undeclared values fail closed
   General:
     CONTROL_UPDATE_RATE: 20.0               # Follower math/update rate (Hz; not MAVSDK Offboard publish cadence)
     COMMAND_SMOOTHING_ENABLED: true          # Enable velocity/rate command EMA smoothing
     SMOOTHING_FACTOR: 0.8                   # EMA coefficient (0–1, higher = more smooth)
-    TARGET_LOSS_TIMEOUT: 3.0                # seconds — coast duration before loss action
-    TARGET_LOSS_COORDINATE_THRESHOLD: 1.5   # Normalized coord threshold for lost target
     LATERAL_GUIDANCE_MODE: coordinated_turn  # coordinated_turn | sideslip
     ENABLE_AUTO_MODE_SWITCHING: false        # Auto-switch guidance mode based on velocity
     GUIDANCE_MODE_SWITCH_VELOCITY: 3.0       # m/s — velocity threshold for mode switch
@@ -1024,12 +1022,9 @@ Follower:
   # === Per-Follower Overrides (sparse — only what differs from General) ===
   # Only specify params that need a different value than General defaults.
   FollowerOverrides:
-    MC_VELOCITY_CHASE:
-      TARGET_LOSS_TIMEOUT: 2.0               # Chase mode: shorter timeout for aggressive tracking
     MC_ATTITUDE_RATE:
       CONTROL_UPDATE_RATE: 50.0              # Higher rate for direct attitude control
       SMOOTHING_FACTOR: 0.85                 # Slightly more smoothing for rate commands
-      TARGET_LOSS_TIMEOUT: 2.0               # Shorter timeout for aggressive tracking
     FW_ATTITUDE_RATE:
       SMOOTHING_FACTOR: 0.85                 # More smoothing for fixed-wing stability
     GM_VELOCITY_VECTOR:
@@ -1043,6 +1038,22 @@ Follower:
 # Default: true (BLOCKED). Follower test is selected through
 # Follower.FOLLOWER_EXECUTION_MODE=COMMAND_PREVIEW and has no PX4 publisher.
 FOLLOWER_CIRCUIT_BREAKER: true            # true blocks Following/PX4 dispatch; false permits the reviewed command path
+
+
+# ==============================================================================
+# TARGET CONTINUITY (Shared Command-Authority Policy)
+# ==============================================================================
+# Trackers provide evidence and followers calculate nominal commands. This
+# section alone controls command authority when target evidence is unavailable.
+# bounded_decay is available in COMMAND_PREVIEW only until MC velocity behavior
+# has passed the documented SITL/HIL acceptance ladder.
+TargetContinuity:
+  MODE: immediate_handoff                 # Options: immediate_handoff | bounded_decay
+  MAX_COAST_TIME_S: 1.0                   # Upper preview-only decay duration
+  MAX_COAST_DISTANCE_M: 2.0               # Upper preview-only commanded travel budget
+  REACQUIRE_CONFIRMATION_S: 0.5           # Stable confirmed evidence before restoration
+  AUTHORITY_RESTORE_TIME_S: 1.0           # Smooth nominal-command restoration duration
+  TERMINAL_ACTION: hold                   # Supported terminal action: hold
 
 
 # ==============================================================================
@@ -1065,21 +1076,6 @@ GM_VELOCITY_CHASE:
 
   # === Lateral Guidance / Yaw Smoothing / Mode Switch ===
   # Now in Follower.General (with per-follower overrides in Follower.FollowerOverrides)
-
-  # === Target Loss Handling ===
-  TARGET_LOSS_HANDLING:
-    CONTINUE_VELOCITY_TIMEOUT: 3.0         # Continue last velocity for N seconds
-    ENABLE_RTL_ON_TIMEOUT: true            # Trigger RTL after timeout
-    RTL_ALTITUDE: 50.0                     # RTL altitude (meters)
-
-    # === Enhanced Timeout Behaviors (PHASE 3.2) ===
-    ENABLE_ADAPTIVE_TIMEOUT: true          # Adjust timeout based on target movement/confidence
-    ADAPTIVE_TIMEOUT_FACTOR: 1.5           # Multiplier for fast-moving targets
-    ENABLE_PREDICTIVE_VELOCITY: true       # Use movement prediction during loss
-    PREDICTION_HISTORY_SIZE: 5             # Number of samples for prediction
-    CONFIDENCE_TIMEOUT_ADJUSTMENT: true    # Adjust timeout based on tracking confidence
-    HIGH_CONFIDENCE_THRESHOLD: 0.8         # High confidence threshold
-    LOW_CONFIDENCE_THRESHOLD: 0.3          # Low confidence threshold
 
   # === Safety Parameters (Override Safety.GlobalLimits if needed) ===
   # These use unified naming: MIN_ALTITUDE, MAX_ALTITUDE
@@ -1155,12 +1151,6 @@ GM_VELOCITY_VECTOR:
   # MAX_ALTITUDE: 120.0                   # Override global maximum altitude (meters)
   # ALTITUDE_CHECK_INTERVAL override: 1.0s (set in Follower.FollowerOverrides.GM_VELOCITY_VECTOR)
 
-  # === Target Loss Handling ===
-  # When gimbal tracking is lost, coast on last velocity vector with decay
-  # TARGET_LOSS_TIMEOUT now in Follower.General (default: 3.0s)
-  ENABLE_VELOCITY_DECAY: true             # Gradually reduce velocity during loss
-  VELOCITY_DECAY_RATE: 0.5                # m/s² - deceleration rate during target loss
-
   # === Performance ===
   # CONTROL_UPDATE_RATE, COMMAND_SMOOTHING_ENABLED, SMOOTHING_FACTOR
   # now in Follower.General (with per-follower overrides in Follower.FollowerOverrides)
@@ -1183,11 +1173,6 @@ MC_VELOCITY_CHASE:
   # NOTE: Max velocity limits are now in Safety.GlobalLimits (single source of truth)
   INITIAL_FORWARD_VELOCITY: 0.0           # m/s - starting velocity
   FORWARD_RAMP_RATE: 0.5                 # m/s² - acceleration rate
-  RAMP_DOWN_ON_TARGET_LOSS: true          # Decelerate when target lost
-  # TARGET_LOSS_TIMEOUT override: 2.0s (set in Follower.FollowerOverrides.MC_VELOCITY_CHASE)
-  # TARGET_LOSS_COORDINATE_THRESHOLD now in Follower.General (default: 1.5)
-  # Target loss stop velocity: ramp to this when target lost (0.0 = full stop)
-  TARGET_LOSS_STOP_VELOCITY: 0.0          # m/s - velocity on target loss (0.0 = stop)
 
   # === Control Enablement ===
   # ENABLE_ALTITUDE_CONTROL now in Follower.General (default: false)
@@ -1345,7 +1330,7 @@ MC_VELOCITY_POSITION:
   YAW_CONTROL_THRESHOLD: 0.02             # Dead zone threshold (normalized)
 
   # === Safety & Performance ===
-  # TARGET_LOSS_TIMEOUT, CONTROL_UPDATE_RATE, COMMAND_SMOOTHING_ENABLED, SMOOTHING_FACTOR
+  # CONTROL_UPDATE_RATE, COMMAND_SMOOTHING_ENABLED, SMOOTHING_FACTOR
   # now in Follower.General (with per-follower overrides in Follower.FollowerOverrides)
 
 # ==============================================================================
@@ -1361,7 +1346,7 @@ MC_VELOCITY_DISTANCE:
   YAW_CONTROL_THRESHOLD: 0.3             # Dead zone threshold (normalized)
 
   # === Safety & Performance ===
-  # TARGET_LOSS_TIMEOUT, CONTROL_UPDATE_RATE, COMMAND_SMOOTHING_ENABLED, SMOOTHING_FACTOR
+  # CONTROL_UPDATE_RATE, COMMAND_SMOOTHING_ENABLED, SMOOTHING_FACTOR
   # now in Follower.General (with per-follower overrides in Follower.FollowerOverrides)
 
 # ==============================================================================
@@ -1439,12 +1424,6 @@ FW_ATTITUDE_RATE:
   STALL_RECOVERY_PITCH: -5.0      # degrees - nose down for recovery
   STALL_RECOVERY_THROTTLE: 1.0    # full throttle for energy recovery
 
-  # === TARGET LOSS HANDLING ===
-  # Fixed-wing cannot hover - must orbit or RTL when target is lost
-  # TARGET_LOSS_ACTION: orbit — set in Safety.FollowerOverrides.FW_ATTITUDE_RATE
-  # TARGET_LOSS_TIMEOUT, TARGET_LOSS_COORDINATE_THRESHOLD now in Follower.General
-  ORBIT_RADIUS: 100.0             # m - loiter radius on target loss
-
   # === PERFORMANCE TUNING ===
   # CONTROL_UPDATE_RATE, COMMAND_SMOOTHING_ENABLED now in Follower.General
   # SMOOTHING_FACTOR override: 0.85 (set in Follower.FollowerOverrides.FW_ATTITUDE_RATE)
@@ -1459,7 +1438,7 @@ FW_ATTITUDE_RATE:
 # - Requires explicit thrust management (no automatic altitude hold)
 # - Bypasses the velocity-control profile and therefore has higher command authority
 # - Supports direct PID or optional line-of-sight-rate guidance
-# - Target loss action: HOVER (rates=0, hover thrust)
+# - Target loss authority is owned by TargetContinuity, not this follower
 #
 # Validate in command preview and PX4-in-loop tests before vehicle acceptance.
 # ==============================================================================
@@ -1515,10 +1494,6 @@ MC_ATTITUDE_RATE:
 
   # === TARGET LOSS HANDLING ===
   # Key advantage: multicopters can HOVER (unlike fixed-wing orbit)
-  # TARGET_LOSS_ACTION: hover — sourced from Safety.GlobalLimits (default is hover)
-  # TARGET_LOSS_TIMEOUT override: 2.0s (set in Follower.FollowerOverrides.MC_ATTITUDE_RATE)
-  # TARGET_LOSS_COORDINATE_THRESHOLD now in Follower.General (default: 1.5)
-  RAMP_DOWN_ON_TARGET_LOSS: true             # Gradually reduce rates on loss
 
   # === ALTITUDE SAFETY ===
   # ENABLE_ALTITUDE_SAFETY, RTL_ON_ALTITUDE_VIOLATION now from Safety.GlobalLimits
@@ -1772,7 +1747,6 @@ Safety:
     # Safety Behavior
     EMERGENCY_STOP_ENABLED: true
     RTL_ON_VIOLATION: true
-    TARGET_LOSS_ACTION: hover            # Options: hover | orbit | stop | rtl | continue
     MAX_SAFETY_VIOLATIONS: 5
 
   # ===========================================================================
@@ -1795,11 +1769,10 @@ Safety:
   #     MIN_ALTITUDE: 40.0               # Higher minimum for ground view mode
   # ===========================================================================
   FollowerOverrides:
-    # Fixed-wing: different rate limits and target-loss behavior
+    # Fixed-wing: different rate limits
     FW_ATTITUDE_RATE:
       MAX_PITCH_RATE: 20.0             # deg/s - FW pitch rate is more conservative than MC
       MAX_YAW_RATE: 25.0               # deg/s - FW yaw/rudder rate limit
-      TARGET_LOSS_ACTION: orbit        # FW cannot hover - must orbit on target loss
     MC_VELOCITY_POSITION:
       MAX_YAW_RATE: 10.0               # Gentle holding mode — restricted yaw rate
     MC_VELOCITY_DISTANCE:

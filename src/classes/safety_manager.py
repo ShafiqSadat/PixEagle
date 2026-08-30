@@ -40,8 +40,7 @@ from classes.follower_types import FollowerType
 from classes.safety_types import (
     VelocityLimits, AltitudeLimits, RateLimits, SafetyBehavior,
     SafetyStatus, SafetyAction, FollowerLimits,
-    VehicleType, TargetLossAction, FOLLOWER_VEHICLE_TYPE, FIELD_LIMIT_MAPPING,
-    is_target_loss_override_compatible,
+    VehicleType, FOLLOWER_VEHICLE_TYPE, FIELD_LIMIT_MAPPING,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,7 +78,6 @@ class SafetyManager:
         'RTL_ON_VIOLATION': True,
         'ALTITUDE_SAFETY_ENABLED': True,
         'MAX_SAFETY_VIOLATIONS': 5,
-        'TARGET_LOSS_ACTION': 'hover',
     }
     _BOOLEAN_LIMITS = {
         'ALTITUDE_SAFETY_ENABLED',
@@ -325,12 +323,6 @@ class SafetyManager:
             return candidate >= global_value
         if limit_name in cls._BOOLEAN_LIMITS:
             return bool(candidate) or not bool(global_value)
-        if limit_name == 'TARGET_LOSS_ACTION' and follower_name:
-            return is_target_loss_override_compatible(
-                follower_name,
-                global_value,
-                candidate,
-            )
         return False
 
     @classmethod
@@ -338,10 +330,6 @@ class SafetyManager:
         """Reject null, coercive, and non-finite values in defense in depth."""
         if limit_name in cls._BOOLEAN_LIMITS:
             return isinstance(value, bool)
-        if limit_name == 'TARGET_LOSS_ACTION':
-            return isinstance(value, str) and value in {
-                action.value for action in TargetLossAction
-            }
         if limit_name == 'MAX_SAFETY_VIOLATIONS':
             return isinstance(value, int) and not isinstance(value, bool) and value > 0
         if not isinstance(value, (int, float)) or isinstance(value, bool):
@@ -428,16 +416,9 @@ class SafetyManager:
         cache_key = f"safety_behavior:{follower_name}"
 
         if cache_key not in self._cache:
-            action_str = self.get_limit('TARGET_LOSS_ACTION', follower_name) or 'hover'
-            try:
-                target_loss_action = TargetLossAction(action_str)
-            except ValueError:
-                target_loss_action = TargetLossAction.HOVER
-
             behavior = SafetyBehavior(
                 emergency_stop_enabled=bool(self.get_limit('EMERGENCY_STOP_ENABLED', follower_name)),
                 rtl_on_violation=bool(self.get_limit('RTL_ON_VIOLATION', follower_name)),
-                target_loss_action=target_loss_action,
                 max_safety_violations=int(self.get_limit('MAX_SAFETY_VIOLATIONS', follower_name) or 5)
             )
             self._cache[cache_key] = behavior
@@ -633,7 +614,7 @@ class SafetyManager:
             'MIN_ALTITUDE', 'MAX_ALTITUDE', 'ALTITUDE_WARNING_BUFFER', 'ALTITUDE_SAFETY_ENABLED',
             'MAX_VELOCITY', 'MAX_VELOCITY_FORWARD', 'MAX_VELOCITY_LATERAL', 'MAX_VELOCITY_VERTICAL',
             'MAX_YAW_RATE', 'MAX_PITCH_RATE', 'MAX_ROLL_RATE',
-            'EMERGENCY_STOP_ENABLED', 'RTL_ON_VIOLATION', 'TARGET_LOSS_ACTION', 'MAX_SAFETY_VIOLATIONS'
+            'EMERGENCY_STOP_ENABLED', 'RTL_ON_VIOLATION', 'MAX_SAFETY_VIOLATIONS'
         ]
 
         result = {}

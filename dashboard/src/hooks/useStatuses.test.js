@@ -27,7 +27,7 @@ import {
 jest.mock('axios');
 
 const degradedTelemetryHealth = {
-  schema_version: 1,
+  schema_version: 2,
   source: 'mavlink2rest',
   enabled: true,
   status: 'degraded',
@@ -92,8 +92,9 @@ const activeFollowingTelemetry = {
     yawspeed_deg_s: 3.0,
   },
   field_source: 'active_follower',
-  target_loss_handler: {
-    state: 'ACTIVE',
+  continuity: {
+    authority_state: 'ACTIVE',
+    authority_fraction: 1,
   },
   safety_systems: {
     safety_violations_count: 0,
@@ -443,7 +444,7 @@ test('normalizes typed following telemetry into legacy-compatible card fields', 
   expect(normalized.control_type).toBe('velocity_body_offboard');
   expect(normalized.available_fields).toEqual(['vel_body_fwd', 'yawspeed_deg_s']);
   expect(normalized.validation_status).toBe(true);
-  expect(normalized.target_loss_handler.state).toBe('ACTIVE');
+  expect(normalized.continuity.authority_state).toBe('ACTIVE');
   expect(normalized.circuit_breaker_active).toBe(false);
 });
 

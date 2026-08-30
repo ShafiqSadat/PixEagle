@@ -26,7 +26,7 @@ from classes.safety_manager import SafetyManager, get_safety_manager, get_limit
 from classes.safety_types import (
     VelocityLimits, AltitudeLimits, RateLimits, SafetyBehavior,
     SafetyStatus, SafetyAction, FollowerLimits,
-    VehicleType, TargetLossAction, FOLLOWER_VEHICLE_TYPE, FIELD_LIMIT_MAPPING
+    VehicleType, FOLLOWER_VEHICLE_TYPE, FIELD_LIMIT_MAPPING
 )
 
 
@@ -215,39 +215,6 @@ class TestLimitResolutionHierarchy:
         )
         assert summary['MAX_VELOCITY_FORWARD']['is_overridden'] is False
         assert summary['MAX_VELOCITY_FORWARD']['source'] == 'GlobalLimits'
-
-    def test_target_loss_override_requires_explicit_compatible_substitution(
-        self,
-        safety_manager,
-    ):
-        safety_manager.load_from_config({
-            'Safety': {
-                'GlobalLimits': {'TARGET_LOSS_ACTION': 'rtl'},
-                'FollowerOverrides': {
-                    'FW_ATTITUDE_RATE': {'TARGET_LOSS_ACTION': 'orbit'},
-                },
-            },
-        })
-
-        assert safety_manager.get_limit(
-            'TARGET_LOSS_ACTION',
-            'FW_ATTITUDE_RATE',
-        ) == 'rtl'
-
-    def test_fixed_wing_orbit_substitutes_for_global_hover(self, safety_manager):
-        safety_manager.load_from_config({
-            'Safety': {
-                'GlobalLimits': {'TARGET_LOSS_ACTION': 'hover'},
-                'FollowerOverrides': {
-                    'FW_ATTITUDE_RATE': {'TARGET_LOSS_ACTION': 'orbit'},
-                },
-            },
-        })
-
-        assert safety_manager.get_limit(
-            'TARGET_LOSS_ACTION',
-            'FW_ATTITUDE_RATE',
-        ) == 'orbit'
 
     def test_global_used_when_no_override(self, safety_manager, config_with_global_limits):
         """Global limit used when no follower override exists."""
@@ -627,13 +594,6 @@ class TestSafetyTypes:
         """VehicleType enum values."""
         assert VehicleType.MULTICOPTER.value == "MULTICOPTER"
         assert VehicleType.FIXED_WING.value == "FIXED_WING"
-        assert VehicleType.GIMBAL.value == "GIMBAL"
-
-    def test_target_loss_action_enum(self):
-        """TargetLossAction enum values."""
-        assert TargetLossAction.HOVER.value == "hover"
-        assert TargetLossAction.ORBIT.value == "orbit"
-        assert TargetLossAction.RTL.value == "rtl"
 
     def test_safety_action_enum(self):
         """SafetyAction enum values."""
@@ -672,7 +632,7 @@ class TestSafetyTypes:
         """FOLLOWER_VEHICLE_TYPE contains expected mappings."""
         assert FOLLOWER_VEHICLE_TYPE['MC_VELOCITY_CHASE'] == VehicleType.MULTICOPTER
         assert FOLLOWER_VEHICLE_TYPE['FW_ATTITUDE_RATE'] == VehicleType.FIXED_WING
-        assert FOLLOWER_VEHICLE_TYPE['GM_VELOCITY_CHASE'] == VehicleType.GIMBAL
+        assert FOLLOWER_VEHICLE_TYPE['GM_VELOCITY_CHASE'] == VehicleType.MULTICOPTER
 
     def test_field_limit_mapping(self):
         """FIELD_LIMIT_MAPPING contains expected mappings."""

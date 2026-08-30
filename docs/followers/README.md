@@ -15,7 +15,7 @@ The follower system is the control core of PixEagle, translating tracker output 
 | [GNC Concepts](03-gnc-concepts/README.md) | Proportional Navigation, L1, TECS, PID |
 | [Configuration](04-configuration/README.md) | Parameters, schema, tuning |
 | [Development Guide](05-development/README.md) | Creating new followers |
-| [Safety System](06-safety/README.md) | SafetyManager, limits |
+| [Safety System](06-safety/README.md) | Safety limits and target continuity |
 | [Integration](07-integration/README.md) | Tracker and MAVLink integration |
 
 ---
@@ -197,6 +197,7 @@ clamped = follower.clamp_velocity(15.0, 8.0, 5.0)
 - [Tracker & Follower Schema Guide](../developers/SCHEMA_DRIVEN_DEVELOPMENT_GUIDE.md)
 - [SmartTracker Guide](../trackers/02-reference/smart-tracker.md)
 - [Configuration Guide](../CONFIGURATION.md)
+- [Target Continuity](06-safety/target-continuity.md)
 - [Main README](../../README.md)
 
 ---
@@ -210,3 +211,4 @@ clamped = follower.clamp_velocity(15.0, 8.0, 5.0)
 | `src/classes/followers/*.py` | Individual follower implementations |
 | `src/classes/safety_manager.py` | Centralized safety limits |
 | `src/classes/setpoint_handler.py` | Schema-aware setpoint management |
+| `src/classes/target_continuity.py` | Shared target-evidence command authority |

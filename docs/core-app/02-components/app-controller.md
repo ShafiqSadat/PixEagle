@@ -98,9 +98,8 @@ async def update_loop(self, frame: np.ndarray) -> np.ndarray:
     await self.telemetry_handler.update()
 
     # Update follower if following is active.
-    # Cached frames, prediction-only tracker output, and inactive tracker output
-    # are rejected unless AppController confirms that the concrete follower
-    # explicitly opts into fail-closed target-loss command publication.
+    # Tracker evidence is normalized centrally. Followers calculate only a
+    # nominal command; TargetContinuitySupervisor owns loss/recovery authority.
     if self.following_active:
         await self.follow_target()
 
@@ -226,27 +225,22 @@ tracker_output = self.tracker.update(frame)
 ### With Follower
 
 ```python
-# AppController first applies command-freshness checks.
+# AppController first normalizes target evidence.
 tracker_output = self._apply_command_freshness_contract(tracker_output)
 
-# Follower consumes active output, or inactive fail-closed output only when the
-# concrete follower opts in. Validator success alone cannot bypass this gate.
-if tracker_output.tracking_active or self._should_route_inactive_output_to_follower(tracker_output):
-    await self._dispatch_tracker_output_to_follower(tracker_output)
-
-    # Follower generates velocity commands
-    # which are sent to drone via PX4InterfaceManager
+# Confirmed evidence may produce a follower nominal intent. The shared
+# TargetContinuitySupervisor alone decides whether that intent is authorized.
+await self._dispatch_tracker_output_to_follower(tracker_output)
 ```
 
 External trackers bypass video-frame freshness only when their explicit
 capabilities declare `requires_video: false`. External trackers without that
 capability are treated as vision-dependent by default.
 
-For classic visual trackers, AppController keeps the command-freshness and
-continuity decisions separate. A rejected measurement is immediately blocked
-from follower commands. The provider's `recovery_recommended` contract controls
-when the bounded detector-recovery window starts; absent or malformed metadata
-uses immediate recovery for compatibility and safety.
+For classic visual trackers, AppController keeps tracker recovery and command
+authority separate. A rejected measurement is immediately blocked from follower
+math. The provider's `recovery_recommended` contract controls when the
+bounded detector-recovery window starts; it does not grant command authority.
 
 ### Validation Injection Hook
 

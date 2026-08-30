@@ -28,8 +28,9 @@ plan is preserved at
 
 ```text
 Camera/streaming -> FramePublisher -> Detector/Tracker -> TargetState
-TargetState -> TargetLossSupervisor -> Follower -> CommandIntent
-CommandIntent -> CommandValidator -> FlightControlService command queue
+TargetState -> TargetEvidenceSnapshot -> Follower nominal CommandIntent
+TargetEvidenceSnapshot + nominal CommandIntent -> TargetContinuitySupervisor
+Authorized CommandIntent -> CommandValidator -> FlightControlService command queue
 FlightControlService -> OffboardCommander heartbeat -> MAVSDK/PX4
 MAVSDK/MAVLink2REST -> TelemetryService -> TelemetrySnapshot -> SafetySupervisor/UI/API/followers
 ExternalGimbalProvider -> GimbalTracker -> TargetState
@@ -51,7 +52,7 @@ flight-adjacent claims require real evidence:
   FlightControlService` with canonical MAVSDK/MAVLink2REST telemetry fakes.
 - L2 PX4 headless SITL follower tests: run PX4 in a pinned container or local
   package, route MAVLink through MavlinkAnywhere, feed synthetic targets, and
-  assert Offboard entry, heartbeat continuity, setpoint behavior, target loss,
+  assert Offboard entry, heartbeat continuity, setpoint behavior, loss handoff,
   abort, disconnect, and failsafe handling.
 - L3 tracker-in-loop tests: deterministic synthetic or recorded video/gimbal
   fixtures drive detector/tracker output into the same follower/control path.

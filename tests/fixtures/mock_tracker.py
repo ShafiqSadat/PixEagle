@@ -268,7 +268,7 @@ class TrackerOutputFactory:
     def invalid_coordinates() -> TrackerOutput:
         """
         Create tracker output with invalid (out of range) coordinates.
-        Used for testing target loss detection.
+        Used for testing invalid target-evidence handling.
         """
         return TrackerOutput(
             data_type=TrackerDataType.POSITION_2D,

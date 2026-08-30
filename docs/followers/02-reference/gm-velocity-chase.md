@@ -75,7 +75,8 @@ tightening overrides, not by this profile.
 
 1. Confirm the gimbal provider reports finite, fresh angle data.
 2. In command preview, move one gimbal axis at a time and verify command sign.
-3. Confirm target loss publishes the configured stop/response intent.
+3. Confirm lost or ambiguous evidence bypasses follower math and requests the
+   shared continuity handoff.
 4. Validate speed ramps and mode switching with PX4 in the loop.
 5. Enable real command publication only after operator abort and envelope tests.
 

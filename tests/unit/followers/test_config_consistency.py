@@ -104,7 +104,7 @@ class TestConfigDefaultConsistency:
         required = [
             'MIN_ALTITUDE', 'MAX_ALTITUDE', 'MAX_VELOCITY',
             'EMERGENCY_STOP_ENABLED', 'RTL_ON_VIOLATION',
-            'TARGET_LOSS_ACTION', 'ALTITUDE_SAFETY_ENABLED',
+            'ALTITUDE_SAFETY_ENABLED',
         ]
         for key in required:
             assert key in gl, f"Safety.GlobalLimits missing required key: {key}"
@@ -146,13 +146,12 @@ class TestConfigDefaultConsistency:
                 "It should have been removed in WP8."
             )
 
-    def test_target_loss_timeout_not_target_lost_timeout(self):
-        """Renamed key TARGET_LOST_TIMEOUT must not appear anywhere in config."""
+    def test_follower_local_target_loss_keys_are_retired(self):
+        """Command-authority settings belong only to TargetContinuity."""
         raw = CONFIG_DEFAULT.read_text(encoding='utf-8')
-        assert 'TARGET_LOST_TIMEOUT' not in raw, (
-            "Stale key 'TARGET_LOST_TIMEOUT' found in config_default.yaml. "
-            "Rename to TARGET_LOSS_TIMEOUT (WP7)."
-        )
+        assert 'TARGET_LOST_TIMEOUT' not in raw
+        assert 'TARGET_LOSS_TIMEOUT' not in raw
+        assert 'TARGET_LOSS_ACTION' not in raw
 
     def test_control_update_rate_not_update_rate(self):
         """Renamed key UPDATE_RATE must not appear as a standalone follower config key."""

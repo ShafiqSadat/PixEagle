@@ -1,6 +1,6 @@
 # PixEagle Modernization Phase And Slice Map
 
-Last updated: 2026-08-08
+Last updated: 2026-08-30
 
 This file is the resume anchor after pauses, context compaction, or handoff. Use
 it together with:
@@ -29,6 +29,7 @@ it together with:
 
 | Slice | Status | Primary Issues | Evidence |
 | --- | --- | --- | --- |
+| Phase 5 target-evidence command authority | implementation and repository validation complete; PX4/SITL/HIL/field acceptance pending | PXE-0169 | `checkpoints/2026-08-30-phase-5-target-continuity-authority.md`; one supervisor now owns authority between confirmed target evidence, nominal follower intent, and Offboard publication. Legacy follower-local loss paths and config are retired. Default live behavior requests immediate observed Hold handoff; bounded horizontal decay/restoration is implemented only for multicopter velocity command preview and cannot silently activate on PX4. Backend `770`, mandatory Phase 0 `73`, dashboard `405`, schema, lint, build, compile, and static gates pass. |
 | Phase 5 shared tracker continuity and bounded recovery | implementation and focused validation complete; operator CSRT/RPi acceptance pending | PXE-0166 | `checkpoints/2026-08-28-phase-5-shared-tracker-continuity.md`; BaseTracker now publishes one continuity contract for visual providers. The first rejected measurement remains follower-ineligible, while detector recovery waits for the provider's configured failure threshold; transient uncertainty keeps the last confirmed geometry/estimate visible and preserves the bounded fail-closed deadline once recovery begins. Focused tracker/controller tests pass; target-hardware and annotated recovery evidence remain separate. |
 | Phase 5 Raspberry Pi Full AI bootstrap handoff | implementation and local validation complete; target repair pending | PXE-0155 | `checkpoints/2026-08-08-phase-5-rpi-full-bootstrap-ncnn-handoff.md`; explicit Full AI installs and verifies the separate NCNN/pnnx tooling while Core and per-model export defaults remain unchanged. After ARM64 evidence showed upstream NCNN adding a second base OpenCV owner, the bundle moved to explicit no-deps installation, shared metadata substitution validation, and fail-fast Python transaction rollback. Bootstrap prerequisite recovery and SSH network URL discovery remain included. Setup/model `349` plus corrective `286`, Phase 0 `73`, docs `31`, schema `39/518`, and static gates pass; repaired Raspberry Pi export/load remains an operator gate. |
 | Phase 5 installer reuse, onboarding, and handoff clarity | implementation complete; final validation pending | PXE-0154 | `checkpoints/2026-07-29-phase-5-installer-reuse-onboarding-handoff.md`; OpenCV/GStreamer reuse now explains a failed provider/version/capability gate and a completed build is independently reverified. Repeated one-line setup offers no-change-default login and managed-service review after update locks are released, while bootstrap-only output is compact and direct commands retain full diagnostics. |

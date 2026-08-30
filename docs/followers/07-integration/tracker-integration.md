@@ -172,85 +172,30 @@ follower_profiles:
 
 ---
 
-## Target Loss Handling
+## Target Evidence And Command Authority
 
-### Detection
+Do not use `tracking_active` alone as command evidence. The controller
+normalizes tracker/video metadata including `usable_for_following`,
+`data_is_stale`, `prediction_only`, identity ambiguity, frame
+freshness, and follow-session generation into one
+`TargetEvidenceSnapshot`.
 
-```python
-# Check if target is lost
-if tracker_output.position_2d is None:
-    target_lost = True
+Only confirmed evidence reaches follower command calculation. Non-confirmed
+evidence bypasses followers and is evaluated by
+`TargetContinuitySupervisor`. Predictions and stale positions remain
+available for overlays and tracker reacquisition, but cannot independently
+authorize pursuit commands.
 
-# Or check coordinates
-if abs(tracker_output.position_2d[0]) > 1.5:  # Outside frame
-    target_lost = True
+The supervisor resolves strategy capabilities from `airframe_phase` and
+`control_type`. The default requests immediate handoff. Qualified
+bounded decay is currently limited to multicopter body-velocity command preview;
+all unsupported or live combinations fail closed. See
+[Target Continuity](../06-safety/target-continuity.md).
 
-# Or check confidence
-if tracker_output.confidence < 0.5:
-    low_confidence = True
-```
-
-### Follower Response
-
-```python
-def follow_target(self, tracker_data):
-    # Check for target loss
-    if not self._handle_target_loss(tracker_data):
-        # Publish an explicit hold/stop/orbit intent or request Offboard exit.
-        # Do not run normal pursuit math on stale last-known coordinates.
-        return self._execute_loss_behavior()
-
-    # Normal following
-    self.calculate_control_commands(tracker_data)
-    return True
-```
-
-### Inactive Output Publication
-
-`BaseFollower.validate_tracker_compatibility()` rejects inactive tracker output
-by default. That is the safe baseline: inactive data is not sent to PX4 unless a
-concrete follower explicitly opts in through
-`should_process_inactive_tracker_output()`. `AppController` enforces that opt-in
-centrally, so a compatibility validator returning `True` is not enough to route
-inactive tracker output to a follower.
-
-Use the opt-in only when `follow_target()` will either:
-
-- publish an intentional stop, hold, orbit, or decayed/coasting command; or
-- request a mode change such as RTL and stop command publication.
-
-Followers must return `True` when they updated or intentionally retained a
-setpoint that still needs to be sent by `AppController.follow_target()`. Return
-`False` only when no command should be published.
-
-### Command Freshness
-
-Do not use `tracking_active` alone as proof that a command can be generated.
-`AppController` also checks tracker and video freshness metadata:
-
-- `raw_data.usable_for_following == false`
-- `raw_data.data_is_stale == true`
-- `raw_data.prediction_only == true`
-- `VideoHandler.get_frame_status().usable_for_following == false`
-
-When any of these conditions apply to a vision-based tracker, the controller
-marks the output inactive and routes it only to followers that explicitly accept
-inactive output. This prevents cached frames and estimator-only predictions from
-being treated as fresh PX4 command targets.
-
-Current public opt-ins publish explicit target-loss commands instead of running
-normal pursuit math on last-known coordinates:
-
-- multicopter velocity chase, distance, position, and ground modes publish zero
-  body velocity/yaw commands;
-- multicopter attitude-rate mode publishes hover attitude/thrust;
-- fixed-wing attitude-rate mode immediately applies orbit, RTL stop, or
-  wings-level cruise according to its configured target-loss action.
-
-SmartTracker can emit `MULTI_TARGET` output while the selected target is stale,
-tentative, or prediction-only. Those outputs remain visible for overlays and
-operator diagnostics, but when command freshness marks them inactive they are
-eligible only for the same explicit fail-closed follower opt-in path above.
+SmartTracker may emit `MULTI_TARGET` output while the selected identity
+is stale, tentative, or prediction-only. Those candidates remain visible for
+operator diagnostics, but do not regain authority until the selected identity
+is continuously confirmed for the configured interval.
 
 ---
 

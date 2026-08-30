@@ -47,8 +47,9 @@ The target-loss scenario now uses PixEagle's validation-only
 `POST /api/v1/sitl/injections/tracker-output` route. That route is disabled
 unless PixEagle starts with `PIXEAGLE_ENABLE_SITL_INJECTIONS=1`, and it only
 dispatches into the follower path when follow mode is already active.
-The checked-in assertions currently target `mc_velocity_position` and verify
-the fail-closed hold fields plus the `OffboardCommander` publication boundary.
+The checked-in assertions target `mc_velocity_position` and verify that stale
+evidence produces no follower intent, stops local publication, and records a
+confirmed target-continuity handoff.
 
 The video-stall scenario uses PixEagle's validation-only
 `POST /api/v1/sitl/injections/video-stall` route. It injects frame-status

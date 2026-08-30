@@ -48,8 +48,10 @@ MC_VELOCITY_DISTANCE:
   YAW_CONTROL_THRESHOLD: 0.3
 ```
 
-Shared altitude-control, smoothing, target-loss, and safety settings live under
-`Follower` and `Safety`; see [Parameter Reference](../04-configuration/parameter-reference.md).
+Shared altitude-control and smoothing settings live under `Follower`;
+limits live under `Safety`; command authority after evidence loss lives
+under `TargetContinuity`. See
+[Parameter Reference](../04-configuration/parameter-reference.md).
 
 ## Limitations
 

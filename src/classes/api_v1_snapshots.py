@@ -949,9 +949,20 @@ def get_following_telemetry_snapshot(owner: Any) -> Dict[str, Any]:
     )
     health_issues.extend(circuit_issues)
 
+    continuity = None
+    app_controller = getattr(owner, "app_controller", None)
+    continuity_getter = getattr(app_controller, "get_target_continuity_status", None)
+    if callable(continuity_getter):
+        try:
+            continuity = coerce_mapping(continuity_getter()) or None
+        except Exception as continuity_error:
+            health_issues.append(
+                f"target_continuity_status_unavailable:{continuity_error}"
+            )
+
     legacy_keys = sorted(str(key) for key in legacy_telemetry.keys())
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "following_telemetry",
         "status": status_snapshot["status"],
         "consumer_guidance": status_snapshot["consumer_guidance"],
@@ -963,9 +974,7 @@ def get_following_telemetry_snapshot(owner: Any) -> Dict[str, Any]:
         "fields": fields,
         "field_source": field_source,
         "last_command_intent": serialize_command_intent(last_command_intent),
-        "target_loss_handler": (
-            coerce_mapping(legacy_telemetry.get("target_loss_handler")) or None
-        ),
+        "continuity": continuity,
         "safety_systems": (
             coerce_mapping(legacy_telemetry.get("safety_systems")) or None
         ),

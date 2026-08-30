@@ -19,7 +19,6 @@ import { FOLLOWER_TYPES } from './safetySchemaUtils';
 const propertyCategory = (name) => {
   if (name.includes('RATE') || name.includes('INTERVAL')) return 'timing';
   if (name.includes('SMOOTH')) return 'smoothing';
-  if (name.includes('TARGET_LOSS')) return 'target_loss';
   if (name.includes('GUIDANCE') || name.includes('MODE_SWITCH')) return 'guidance';
   if (name.includes('ALTITUDE')) return 'altitude';
   return 'general';
@@ -195,7 +194,6 @@ export { FOLLOWER_TYPES };
 export const PROPERTY_CATEGORIES = {
   timing: { label: 'Control Timing', icon: 'Speed', color: 'primary' },
   smoothing: { label: 'Command Smoothing', icon: 'Tune', color: 'info' },
-  target_loss: { label: 'Target Loss Detection', icon: 'GpsOff', color: 'error' },
   guidance: { label: 'Guidance Modes', icon: 'Navigation', color: 'warning' },
   altitude: { label: 'Altitude Control', icon: 'Height', color: 'success' },
   yaw_smoothing: { label: 'Yaw Smoothing Pipeline', icon: 'RotateRight', color: 'secondary' },

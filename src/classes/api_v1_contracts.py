@@ -1001,10 +1001,53 @@ class APIFollowingStatusResponse(BaseModel):
     timestamp: float
 
 
+class APITargetContinuityHandoffRequest(BaseModel):
+    """One idempotent request to transfer command authority away from following."""
+
+    action: Literal["hold"]
+    request_id: str
+    reason_code: str
+
+
+class APITargetContinuityHandoffResult(BaseModel):
+    """Process-local observation of the most recent authority handoff attempt."""
+
+    success: bool
+    detail: str
+    recorded_at_monotonic_s: float
+    request_id: Optional[str] = None
+
+
+class APITargetContinuityStatus(BaseModel):
+    """Shared target-evidence command-authority state for the active session."""
+
+    schema_version: int = 1
+    source: Literal["target_continuity_supervisor"] = "target_continuity_supervisor"
+    authority_state: Literal[
+        "INACTIVE",
+        "ACTIVE",
+        "COASTING",
+        "REACQUIRING",
+        "HANDOFF_PENDING",
+    ]
+    policy_mode: Literal["immediate_handoff", "bounded_decay"]
+    terminal_action: Literal["hold"]
+    session_epoch: int
+    episode_id: int
+    authority_fraction: float
+    loss_elapsed_s: float
+    coast_distance_m: float
+    reason_code: str
+    handoff_pending: bool
+    handoff_request: Optional[APITargetContinuityHandoffRequest] = None
+    last_handoff_result: Optional[APITargetContinuityHandoffResult] = None
+    claim_boundary: str
+
+
 class APIFollowingTelemetryResponse(BaseModel):
     """Typed follower telemetry/setpoint snapshot for API/MCP/dashboard consumers."""
 
-    schema_version: int = 1
+    schema_version: int = 2
     source: Literal["following_telemetry"] = "following_telemetry"
     status: Literal["inactive", "active", "degraded", "unavailable"]
     consumer_guidance: Literal[
@@ -1028,7 +1071,7 @@ class APIFollowingTelemetryResponse(BaseModel):
         "unavailable",
     ] = "unavailable"
     last_command_intent: Optional[Dict[str, Any]] = None
-    target_loss_handler: Optional[Dict[str, Any]] = None
+    continuity: Optional[APITargetContinuityStatus] = None
     safety_systems: Optional[Dict[str, Any]] = None
     performance: Optional[Dict[str, Any]] = None
     circuit_breaker: Optional[Dict[str, Any]] = None
@@ -1456,11 +1499,13 @@ class SITLTrackerInjectionResponse(BaseModel):
 
     status: str
     accepted: bool
+    dispatch_accepted: bool = False
     reason: Optional[str] = None
     following_active: bool
     injection: SITLTrackerInjectionSummary
     command_intent: Optional[SITLCommandIntentSummary] = None
     offboard_commander: Optional[SITLOffboardCommanderSummary] = None
+    continuity: Optional[APITargetContinuityStatus] = None
     timestamp: float
 
 
@@ -1507,11 +1552,13 @@ class SITLVideoStallResponse(BaseModel):
 
     status: str
     accepted: bool
+    dispatch_accepted: bool = False
     reason: Optional[str] = None
     following_active: bool
     injection: SITLVideoStallSummary
     command_intent: Optional[SITLCommandIntentSummary] = None
     offboard_commander: Optional[SITLOffboardCommanderSummary] = None
+    continuity: Optional[APITargetContinuityStatus] = None
     timestamp: float
 
 

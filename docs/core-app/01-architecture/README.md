@@ -32,7 +32,7 @@ PixEagle's core application follows a layered architecture with clear separation
 │  │ConfigService │  │SchemaManager │  │ LoggingManager   │  │
 │  └──────────────┘  └──────────────┘  └──────────────────┘  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │Coord.Transf. │  │TrackStateM.  │  │ TargetLossHndlr │  │
+│  │Coord.Transf. │  │TrackStateM.  │  │TargetContinuity│  │
 │  └──────────────┘  └──────────────┘  └──────────────────┘  │
 └────────────────────────────────────────────────────────────┘
             │                    │                 │

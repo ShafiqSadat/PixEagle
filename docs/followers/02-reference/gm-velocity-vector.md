@@ -72,13 +72,13 @@ Safety:
 it cannot raise it. Change the global limits only after validating the vehicle,
 site, coordinate signs, and mount geometry.
 
-## Freshness And Target Loss
+## Freshness And Target Continuity
 
 The follower accepts commands only from a fresh, active, usable gimbal tracker
 output. A stale angle sample may remain visible for diagnostics, but the tracker
-marks it inactive and unusable for following. The follower then emits a bounded
-zero/hold intent instead of continuing an old pursuit vector. Velocity decay is
-used only inside the configured target-loss handling boundary.
+marks it inactive and unusable for following. It then bypasses follower math
+and reaches the shared target-continuity authority boundary. Prediction-only or
+last-known angles never authorize an old pursuit vector.
 
 ## Bring-Up Order
 
@@ -86,8 +86,8 @@ used only inside the configured target-loss handling boundary.
 2. Confirm the provider is connected and reports fresh tracking-status packets.
 3. Verify yaw, pitch, and roll signs while the vehicle cannot move.
 4. Verify `MOUNT_TYPE`, offsets, and inversion flags against the physical mount.
-5. Confirm stale or lost tracking produces an unusable output and zero/hold
-   intent.
+5. Confirm stale or lost tracking produces an unusable output and continuity
+   handoff.
 6. Validate telemetry, Offboard transitions, and command bounds in SIH/SITL or
    HIL before any separately approved field test.
 

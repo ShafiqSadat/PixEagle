@@ -343,6 +343,16 @@ class Follower:
                 "Unable to determine the active follower control type"
             ) from e
 
+    def get_airframe_phase(self) -> str:
+        """Return the schema-declared airframe phase for this command profile."""
+        try:
+            return self.follower.setpoint_handler.get_airframe_phase()
+        except Exception as e:
+            logger.error(f"Error getting airframe phase: {e}")
+            raise RuntimeError(
+                "Unable to determine the active follower airframe phase"
+            ) from e
+
     def get_last_command_intent(self):
         """Return the latest atomic command intent produced by the active follower."""
         try:
@@ -385,19 +395,6 @@ class Follower:
             logger.error(f"Error validating tracker compatibility: {e}")
             return False
 
-    def should_process_inactive_tracker_output(self, tracker_data) -> bool:
-        """
-        Forward explicit inactive-output handling opt-ins to the implementation.
-        """
-        try:
-            handler = getattr(self.follower, 'should_process_inactive_tracker_output', None)
-            if callable(handler):
-                return bool(handler(tracker_data))
-            return False
-        except Exception as e:
-            logger.error(f"Error checking inactive tracker output handling: {e}")
-            return False
-    
     def get_display_name(self) -> str:
         """
         Returns the human-readable display name for the current follower mode.

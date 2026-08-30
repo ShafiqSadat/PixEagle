@@ -95,7 +95,7 @@ inactive truth when measurements are no longer usable.
    profile's required/optional tracker data in `follower_commands.yaml`.
 7. Add user-tunable parameters to `configs/config_default.yaml`, regenerate the
    schema, and add validation/retirement entries when replacing an old key.
-8. Add unit tests for normal commands, target loss, stale input, non-finite
+8. Add unit tests for normal commands, continuity handoff, stale input, non-finite
    values, safety limits, profile/registry consistency, and command-frame signs.
 9. Add a reference page under `docs/followers/02-reference/`.
 
@@ -128,9 +128,11 @@ class MyFollower(BaseFollower):
         return True
 ```
 
-Each follower must define an explicit inactive/target-loss policy. The default
-base behavior rejects inactive samples. A follower may opt in only when it
-publishes a bounded hold, stop, coast, or otherwise reviewed target-loss intent.
+Followers calculate nominal commands only from fresh, confirmed evidence.
+Inactive, stale, prediction-only, or ambiguous evidence bypasses follower math
+and is evaluated by the shared `TargetContinuitySupervisor`. New
+continuity behavior belongs in that shared capability registry and must resolve
+from `airframe_phase` plus `control_type`, never a follower name.
 
 ## Add A Tracker
 
@@ -144,7 +146,7 @@ publishes a bounded hold, stop, coast, or otherwise reviewed target-loss intent.
 5. Update follower compatibility only where the implementation and current
    sample fields support it.
 6. Add tests for initialization, selection geometry, confidence/freshness,
-   target loss, restart behavior, and catalog/registry agreement.
+   continuity handoff, restart behavior, and catalog/registry agreement.
 7. Add setup guidance for optional native dependencies. Missing optional
    packages must produce an actionable readiness error, not a late import crash.
 

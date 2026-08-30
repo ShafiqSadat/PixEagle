@@ -55,7 +55,7 @@ from classes.followers.custom_pid import CustomPID
 from classes.parameters import Parameters
 from classes.follower_config_manager import get_follower_config_manager
 from classes.followers.yaw_rate_smoother import YawRateSmoother
-from classes.tracker_output import TrackerOutput, TrackerDataType
+from classes.tracker_output import TrackerOutput
 import logging
 import time
 from math import degrees
@@ -121,7 +121,6 @@ class MCVelocityPositionFollower(BaseFollower):
         fcm = get_follower_config_manager()
         _fn = 'MC_VELOCITY_POSITION'
         self.altitude_control_enabled = fcm.get_param('ENABLE_ALTITUDE_CONTROL', _fn)
-        self.target_lost_timeout = fcm.get_param('TARGET_LOSS_TIMEOUT', _fn)
         self.control_update_rate = fcm.get_param('CONTROL_UPDATE_RATE', _fn)
         self.command_smoothing_enabled = fcm.get_param('COMMAND_SMOOTHING_ENABLED', _fn)
         self.smoothing_factor = fcm.get_param('SMOOTHING_FACTOR', _fn)
@@ -448,17 +447,9 @@ class MCVelocityPositionFollower(BaseFollower):
             RuntimeError: If control execution fails.
         """
         try:
-            inactive_output = self.should_process_inactive_tracker_output(tracker_data)
-
             # Validate tracker compatibility (errors are logged by base class with rate limiting)
-            if (
-                not self.validate_tracker_compatibility(tracker_data) and
-                not inactive_output
-            ):
+            if not self.validate_tracker_compatibility(tracker_data):
                 return False
-
-            if inactive_output:
-                return self._handle_inactive_tracker_output()
 
             # Extract target coordinates
             target_coords = self.extract_target_coordinates(tracker_data)
@@ -502,45 +493,6 @@ class MCVelocityPositionFollower(BaseFollower):
             self.update_telemetry_metadata('last_error', str(e))
             return False
 
-    def _handle_inactive_tracker_output(self) -> bool:
-        """Publish an explicit hold command for inactive vision target output."""
-        self._last_yaw_command = 0.0
-        self._last_vertical_velocity_up_m_s = 0.0
-        self._last_update_time = time.time()
-        if not self.set_command_fields(
-            {
-                'vel_body_fwd': 0.0,
-                'vel_body_right': 0.0,
-                'vel_body_down': 0.0,
-                'yawspeed_deg_s': 0.0,
-            },
-            reason='mc_velocity_position_inactive_hold',
-        ):
-            return False
-        self.update_telemetry_metadata('target_valid', False)
-        self.update_telemetry_metadata('target_lost', True)
-        self.update_telemetry_metadata('control_active', False)
-        logger.warning("Inactive tracker output received - holding position follower command")
-        return True
-
-    def should_process_inactive_tracker_output(self, tracker_data: TrackerOutput) -> bool:
-        """
-        Allow inactive position outputs to publish an explicit hold command.
-
-        Inactive tracker output must not run normal pursuit math even when it
-        carries last-known valid coordinates.
-        """
-        return self._is_inactive_tracker_output(
-            tracker_data,
-            allowed_types={
-                TrackerDataType.POSITION_2D,
-                TrackerDataType.POSITION_3D,
-                TrackerDataType.BBOX_CONFIDENCE,
-                TrackerDataType.VELOCITY_AWARE,
-                TrackerDataType.MULTI_TARGET,
-            },
-        )
-    
     # ==================== Enhanced Status and Monitoring ====================
     
     def get_performance_metrics(self) -> Dict[str, Any]:

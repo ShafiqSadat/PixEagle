@@ -262,7 +262,6 @@ def test_attitude_yaw_gate_uses_error_from_resolved_aim_point():
     follower = MCAttitudeRateFollower.__new__(MCAttitudeRateFollower)
     follower.extract_target_coordinates = MagicMock(return_value=(0.2, 0.0))
     follower._update_pid_gains = MagicMock()
-    follower._handle_target_loss = MagicMock(return_value=True)
     follower.px4_controller = type(
         'PX4',
         (),
@@ -297,8 +296,9 @@ def test_chase_emergency_stop_bypasses_yaw_smoothing_history():
     follower.last_ramp_update_time = 99.9
     follower.ramp_update_rate = 10.0
     follower.extract_target_coordinates = MagicMock(return_value=(0.4, 0.0))
-    follower._handle_target_loss_enhanced = MagicMock(return_value=True)
-    follower.last_valid_target_coords = (0.4, 0.0)
+    follower.validate_target_coordinates = MagicMock(return_value=True)
+    follower.target_confidence_threshold = 0.5
+    follower.max_reasonable_target_velocity = 100.0
     follower._update_forward_velocity = MagicMock(return_value=3.0)
     follower._calculate_tracking_commands = MagicMock(return_value=(1.0, 0.5, 0.4))
     follower.adaptive_mode_enabled = False
@@ -315,7 +315,9 @@ def test_chase_emergency_stop_bypasses_yaw_smoothing_history():
     follower.update_telemetry_metadata = MagicMock()
 
     with patch('classes.followers.base_follower.time.monotonic', return_value=100.0):
-        follower.calculate_control_commands(MagicMock())
+        follower.calculate_control_commands(
+            MagicMock(confidence=1.0, velocity=None)
+        )
 
     command = follower.set_command_fields.call_args.args[0]
     assert command == {
@@ -334,12 +336,10 @@ def test_chase_command_path_ramps_forward_and_preserves_yaw_direction():
     follower.last_ramp_update_time = 99.0
     follower.ramp_update_rate = 10.0
     follower.extract_target_coordinates = MagicMock(return_value=(0.4, 0.0))
-    follower._handle_target_loss_enhanced = MagicMock(return_value=True)
-    follower.last_valid_target_coords = (0.4, 0.0)
+    follower.validate_target_coordinates = MagicMock(return_value=True)
+    follower.target_confidence_threshold = 0.5
+    follower.max_reasonable_target_velocity = 100.0
     follower.emergency_stop_active = False
-    follower.target_lost = False
-    follower.ramp_down_on_target_loss = True
-    follower.target_loss_stop_velocity = 0.0
     follower.max_forward_velocity = 8.0
     follower.forward_ramp_rate = 2.0
     follower.forward_velocity_deadzone = 0.01
@@ -355,7 +355,9 @@ def test_chase_command_path_ramps_forward_and_preserves_yaw_direction():
     follower.update_telemetry_metadata = MagicMock()
 
     with patch('classes.followers.base_follower.time.monotonic', return_value=100.0):
-        follower.calculate_control_commands(MagicMock())
+        follower.calculate_control_commands(
+            MagicMock(confidence=1.0, velocity=None)
+        )
 
     command = follower.set_command_fields.call_args.args[0]
     assert command['vel_body_fwd'] == pytest.approx(0.2)

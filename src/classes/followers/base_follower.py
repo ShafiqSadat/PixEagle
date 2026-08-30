@@ -30,7 +30,6 @@ from classes.safety_types import SafetyAction, SafetyStatus
 from classes.schema_manager import get_schema_manager
 from classes.setpoint_handler import SetpointHandler
 from classes.tracker_output import TrackerOutput, TrackerDataType
-from classes.tracker_runtime_status import evaluate_tracker_command_freshness
 import logging
 import time
 import numpy as np
@@ -997,39 +996,6 @@ class BaseFollower(ABC):
         logger.debug(f"Tracker data is compatible with {self.get_display_name()}")
         return True
 
-    def should_process_inactive_tracker_output(self, tracker_data: TrackerOutput) -> bool:
-        """
-        Return True only when this follower can use inactive tracker output safely.
-
-        The default is fail-closed rejection. Followers that need inactive output
-        to emit a stop/hold command must opt in explicitly.
-        """
-        return False
-
-    def _is_inactive_tracker_output(
-        self,
-        tracker_data: TrackerOutput,
-        allowed_types: Optional[set] = None,
-    ) -> bool:
-        """
-        Shared predicate for target-loss command publication opt-ins.
-
-        Followers use this to tell AppController that command-unusable tracker
-        output is still a meaningful input because the follower will hold,
-        coast, orbit, or stop through its target-loss policy. The shared
-        evaluator also catches inconsistent direct-call samples that remain
-        marked active while their data is stale or prediction-only.
-        """
-        if not isinstance(tracker_data, TrackerOutput):
-            return False
-        if allowed_types is not None and tracker_data.data_type not in allowed_types:
-            return False
-        return not bool(
-            evaluate_tracker_command_freshness(tracker_data)[
-                "usable_for_following"
-            ]
-        )
-    
     def _has_required_data(self, tracker_data: TrackerOutput, data_type: TrackerDataType) -> bool:
         """
         Checks if tracker data contains the required data type.

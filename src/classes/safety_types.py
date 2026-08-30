@@ -28,46 +28,6 @@ class VehicleType(Enum):
     """Vehicle type classification for safety profiles."""
     MULTICOPTER = "MULTICOPTER"
     FIXED_WING = "FIXED_WING"
-    GIMBAL = "GIMBAL"
-
-
-class TargetLossAction(Enum):
-    """Action to take when target is lost."""
-    HOVER = "hover"       # Multicopter: stop and hover
-    ORBIT = "orbit"       # Fixed-wing: orbit last position
-    STOP = "stop"         # Gimbal: zero velocities
-    RTL = "rtl"           # Return to launch
-    CONTINUE = "continue" # Continue last command
-
-
-# Target-loss policies have no honest total ordering. Keep exceptional
-# vehicle-compatible substitutions explicit instead of treating every action
-# override as if it tightened a numeric safety limit.
-TARGET_LOSS_OVERRIDE_COMPATIBILITY = {
-    "FW_ATTITUDE_RATE": {
-        (TargetLossAction.HOVER, TargetLossAction.ORBIT),
-    },
-}
-
-
-def is_target_loss_override_compatible(
-    follower_name: str,
-    global_action: str,
-    override_action: str,
-) -> bool:
-    """Return whether an action preserves policy or is an explicit substitute."""
-    try:
-        global_value = TargetLossAction(global_action)
-        override_value = TargetLossAction(override_action)
-    except ValueError:
-        return False
-    if override_value == global_value:
-        return True
-    allowed = TARGET_LOSS_OVERRIDE_COMPATIBILITY.get(
-        str(follower_name).strip().upper(),
-        set(),
-    )
-    return (global_value, override_value) in allowed
 
 
 class SafetyAction(Enum):
@@ -107,7 +67,6 @@ class SafetyBehavior(NamedTuple):
     """Safety behavior configuration."""
     emergency_stop_enabled: bool
     rtl_on_violation: bool
-    target_loss_action: TargetLossAction
     max_safety_violations: int = 5
 
 
@@ -164,9 +123,9 @@ FOLLOWER_VEHICLE_TYPE = {
     'MC_VELOCITY_DISTANCE': VehicleType.MULTICOPTER,
     'MC_VELOCITY_GROUND': VehicleType.MULTICOPTER,
     'MC_ATTITUDE_RATE': VehicleType.MULTICOPTER,
-    # Gimbal followers
-    'GM_VELOCITY_VECTOR': VehicleType.GIMBAL,
-    'GM_VELOCITY_CHASE': VehicleType.GIMBAL,
+    # Gimbal-derived followers still command a multicopter body-velocity profile.
+    'GM_VELOCITY_VECTOR': VehicleType.MULTICOPTER,
+    'GM_VELOCITY_CHASE': VehicleType.MULTICOPTER,
     # Fixed-wing followers
     'FW_ATTITUDE_RATE': VehicleType.FIXED_WING,
 }

@@ -18,7 +18,7 @@ from classes.safety_types import FIELD_LIMIT_MAPPING
 # Set up logging
 logger = logging.getLogger(__name__)
 
-SUPPORTED_FOLLOWER_COMMAND_SCHEMA_VERSIONS = frozenset({"2.0.0"})
+SUPPORTED_FOLLOWER_COMMAND_SCHEMA_VERSIONS = frozenset({"2.1.0"})
 _SCHEMA_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -201,6 +201,7 @@ def validate_follower_command_schema(schema: Any) -> Dict[str, Any]:
                 "display_name",
                 "description",
                 "control_type",
+                "airframe_phase",
                 "required_fields",
                 "ui_category",
                 "required_tracker_data",
@@ -225,6 +226,15 @@ def validate_follower_command_schema(schema: Any) -> Dict[str, Any]:
             raise ValueError(
                 f"follower_profiles.{profile_name}.control_type references unknown "
                 f"control type {control_type!r}"
+            )
+        airframe_phase = _require_nonempty_string(
+            profile.get("airframe_phase"),
+            f"follower_profiles.{profile_name}.airframe_phase",
+        )
+        if airframe_phase not in {"multicopter", "fixed_wing", "vtol_transition"}:
+            raise ValueError(
+                f"follower_profiles.{profile_name}.airframe_phase has unsupported "
+                f"value {airframe_phase!r}"
             )
         required_fields = _require_unique_string_list(
             profile.get("required_fields"),
@@ -874,6 +884,15 @@ class SetpointHandler:
                 f"{control_type!r}"
             )
         return control_type
+
+    def get_airframe_phase(self) -> str:
+        """Return the command profile's declared physical airframe phase."""
+        phase = self.profile_config.get("airframe_phase")
+        if phase not in {"multicopter", "fixed_wing", "vtol_transition"}:
+            raise ValueError(
+                f"Profile '{self.profile_name}' has unknown airframe phase {phase!r}"
+            )
+        return str(phase)
 
     def get_mavsdk_dispatch_method(self) -> str:
         """Return the canonical YAML-backed MAVSDK method for this profile."""

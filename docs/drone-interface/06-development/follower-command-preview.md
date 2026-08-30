@@ -135,7 +135,7 @@ Preview evidence can show:
 
 - the selected tracker output reached the active follower;
 - follower math produced finite, schema-valid, bounded command fields;
-- retargeting, target loss, recovery, and failsafe intent handling behave as
+- retargeting, evidence loss/recovery, continuity authority, and handoff behave as
   expected locally;
 - the dashboard/API expose the resulting intent and explicit claim boundary.
 

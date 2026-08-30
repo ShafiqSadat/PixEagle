@@ -11,12 +11,13 @@ configs/follower_commands.yaml
 ## Schema Structure
 
 ```yaml
-schema_version: "2.0.0"
+schema_version: "2.1.0"
 
 follower_profiles:
   # Profile definitions
   mc_velocity_chase:
     control_type: velocity_body_offboard
+    airframe_phase: multicopter
     # ...
 
 command_fields:

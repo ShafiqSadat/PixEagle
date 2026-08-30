@@ -71,15 +71,16 @@ MC_ATTITUDE_RATE:
   ENABLE_COORDINATED_TURNS: true
 ```
 
-Rate, velocity, altitude, target-loss, and emergency behavior are owned by the
-central `Safety` and `Follower` sections. PID gains are owned by `PID_GAINS`.
+Rate, velocity, altitude, and emergency behavior are owned by the central
+`Safety` and `Follower` sections. Target-evidence authority is
+owned by `TargetContinuity`. PID gains are owned by `PID_GAINS`.
 Use [Configuration](../../CONFIGURATION.md) and the generated schema as the
 parameter authority instead of copying this excerpt as a complete config.
 
 ## Acceptance Boundary
 
 Start with command preview and inspect signs, limits, freshness transitions,
-and target-loss output. Then validate against the exact PX4 firmware, vehicle,
+and continuity handoff. Then validate against the exact PX4 firmware, vehicle,
 camera mounting, telemetry source, and thrust model in SITL/HIL before any
 controlled field acceptance. A valid visual target alone does not establish
 safe thrust or attitude authority.

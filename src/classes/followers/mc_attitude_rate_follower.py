@@ -10,7 +10,7 @@ from classes.followers.base_follower import BaseFollower
 from classes.followers.custom_pid import CustomPID
 from classes.parameters import Parameters
 from classes.follower_config_manager import get_follower_config_manager
-from classes.tracker_output import TrackerOutput, TrackerDataType
+from classes.tracker_output import TrackerOutput
 import logging
 import math
 import numpy as np
@@ -20,7 +20,6 @@ from enum import Enum
 from typing import Tuple, Optional, Dict, Any, Deque
 from datetime import datetime
 from collections import deque
-from classes.safety_types import TargetLossAction  # authoritative enum — avoids cross-type == always False
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ class MCAttitudeRateFollower(BaseFollower):
     ===============
     - Yaw error gating (don't dive until aligned with target)
     - Attitude angle limits (prevent flip)
-    - Target loss → HOVER (rates=0, hover thrust)
+    - Shared target-continuity authority handoff outside this follower
     - Altitude safety monitoring with RTL
     - Emergency stop capability
     """
@@ -131,13 +130,8 @@ class MCAttitudeRateFollower(BaseFollower):
         self.enable_coordinated_turns = config.get('ENABLE_COORDINATED_TURNS', True)
         self.turn_coordination_gain = config.get('TURN_COORDINATION_GAIN', 1.0)
 
-        # === TARGET LOSS HANDLING (shared params from FollowerConfigManager) ===
         fcm = get_follower_config_manager()
         _fn = 'MC_ATTITUDE_RATE'
-        self.target_loss_timeout = fcm.get_param('TARGET_LOSS_TIMEOUT', _fn)
-        # TARGET_LOSS_ACTION delegated to SafetyManager (GlobalLimits → FollowerOverrides)
-        self.target_loss_action = self.safety_manager.get_safety_behavior(self._follower_config_name).target_loss_action
-        self.target_loss_coord_threshold = fcm.get_param('TARGET_LOSS_COORDINATE_THRESHOLD', _fn)
 
         # === ALTITUDE SAFETY (limits from SafetyManager; per-follower flag via is_altitude_safety_enabled()) ===
         self.min_altitude_limit = self.altitude_limits.min_altitude
@@ -163,11 +157,6 @@ class MCAttitudeRateFollower(BaseFollower):
         self.last_bank_angle = 0.0
         self.last_thrust_command = self.hover_thrust
 
-        # Target tracking state
-        self.target_lost = False
-        self.target_loss_start_time = None
-        self.last_valid_target_coords = initial_target_coords
-
         # Safety state
         self.emergency_stop_active = False
         self.last_altitude_check_time = time.time()
@@ -186,7 +175,6 @@ class MCAttitudeRateFollower(BaseFollower):
 
         # Telemetry
         self.total_commands_issued = 0
-        self.target_loss_events = 0
 
         # Initialize PID controllers
         self._initialize_pid_controllers()
@@ -195,15 +183,13 @@ class MCAttitudeRateFollower(BaseFollower):
         self.update_telemetry_metadata('controller_type', 'attitude_rate')
         self.update_telemetry_metadata('control_strategy', 'multicopter_attitude_rate')
         self.update_telemetry_metadata('guidance_mode', self.guidance_mode.value)
-        self.update_telemetry_metadata('target_loss_action', self.target_loss_action.value)
         self.update_telemetry_metadata('safety_features', [
-            'yaw_error_gating', 'altitude_safety', 'target_loss_hover',
+            'yaw_error_gating', 'altitude_safety',
             'pitch_thrust_compensation', 'emergency_stop'
         ])
 
         logger.info(f"MCAttitudeRateFollower initialized with attitude rate control")
         logger.info(f"Guidance mode: {self.guidance_mode.value}")
-        logger.info(f"Target loss action: {self.target_loss_action.value}")
         logger.debug(f"Rate limits - Pitch: {degrees(self.max_pitch_rate_rad):.1f}°/s, "
                     f"Yaw: {degrees(self.max_yaw_rate_rad):.1f}°/s, "
                     f"Roll: {degrees(self.max_roll_rate_rad):.1f}°/s")
@@ -605,52 +591,6 @@ class MCAttitudeRateFollower(BaseFollower):
             logger.debug(f"Yaw error gating active - error: {abs(yaw_error):.3f} > {self.yaw_error_threshold}")
             return 0.0, self.hover_thrust
 
-    def _handle_target_loss(self, target_coords: Tuple[float, float]) -> bool:
-        """
-        Handles target loss detection with HOVER behavior.
-
-        Args:
-            target_coords: Current target coordinates.
-
-        Returns:
-            bool: True if target is valid, False if lost.
-        """
-        try:
-            current_time = time.time()
-            threshold = self.target_loss_coord_threshold
-
-            is_valid = (
-                self.validate_target_coordinates(target_coords) and
-                not (np.isnan(target_coords[0]) or np.isnan(target_coords[1])) and
-                not (abs(target_coords[0]) > threshold or abs(target_coords[1]) > threshold)
-            )
-
-            if is_valid:
-                if self.target_lost:
-                    logger.info("Target recovered after loss")
-                self.target_lost = False
-                self.target_loss_start_time = None
-                self.last_valid_target_coords = target_coords
-                return True
-            else:
-                if not self.target_lost:
-                    self.target_lost = True
-                    self.target_loss_start_time = current_time
-                    self.target_loss_events += 1
-                    logger.warning(f"Target lost at coordinates: {target_coords}")
-                else:
-                    loss_duration = current_time - self.target_loss_start_time
-                    if loss_duration > self.target_loss_timeout:
-                        logger.debug(f"Target lost for {loss_duration:.1f}s")
-                        if self.target_loss_action == TargetLossAction.RTL:
-                            self._trigger_rtl("target_loss_timeout")
-
-                return False
-
-        except Exception as e:
-            logger.error(f"Target loss handling error: {e}")
-            return False
-
     def _check_altitude_safety(self) -> bool:
         """Monitors altitude bounds and triggers RTL if violated."""
         if self._safety_checks_bypassed_for_testing():
@@ -688,7 +628,7 @@ class MCAttitudeRateFollower(BaseFollower):
 
     # ==================== Main Control Methods ====================
 
-    def calculate_control_commands(self, tracker_data: TrackerOutput) -> None:
+    def calculate_control_commands(self, tracker_data: TrackerOutput) -> bool:
         """
         Calculates and sets attitude rate control commands.
 
@@ -700,16 +640,10 @@ class MCAttitudeRateFollower(BaseFollower):
             target_coords = self.extract_target_coordinates(tracker_data)
             if not target_coords:
                 logger.warning("No valid target coordinates")
-                self._set_hover_commands()
-                return
+                return False
 
             # Update PID gains
             self._update_pid_gains()
-
-            # Handle target loss
-            if not self._handle_target_loss(target_coords):
-                self._set_hover_commands()
-                return
 
             # Get current flight state
             current_altitude = getattr(self.px4_controller, 'current_altitude', 0.0)
@@ -799,10 +733,11 @@ class MCAttitudeRateFollower(BaseFollower):
                 degrees(roll_rate_rad_s),
                 thrust,
             )
+            return True
 
         except Exception as e:
             logger.error(f"Control command calculation error: {e}")
-            self._set_hover_commands()
+            return False
 
     def _set_hover_commands(self) -> None:
         """Sets hover commands (all rates zero, hover thrust)."""
@@ -832,13 +767,8 @@ class MCAttitudeRateFollower(BaseFollower):
                 logger.debug("Emergency stop active")
                 return False
 
-            inactive_output = self.should_process_inactive_tracker_output(tracker_data)
-
             # Validate tracker compatibility (errors are logged by base class with rate limiting)
-            if (
-                not self.validate_tracker_compatibility(tracker_data) and
-                not inactive_output
-            ):
+            if not self.validate_tracker_compatibility(tracker_data):
                 return False
 
             # Perform altitude safety check
@@ -846,12 +776,8 @@ class MCAttitudeRateFollower(BaseFollower):
                 logger.error("Altitude safety check failed")
                 return False
 
-            if inactive_output:
-                return self._handle_inactive_tracker_output()
-
             # Calculate and apply control commands
-            self.calculate_control_commands(tracker_data)
-            return True
+            return self.calculate_control_commands(tracker_data)
 
         except ValueError as e:
             # Validation errors - these indicate bad configuration or state
@@ -870,36 +796,6 @@ class MCAttitudeRateFollower(BaseFollower):
             self.reset_command_fields()
             return False
 
-    def _handle_inactive_tracker_output(self) -> bool:
-        """Publish hover commands for inactive vision target output."""
-        if not getattr(self, 'target_lost', False):
-            self.target_lost = True
-            self.target_loss_start_time = time.time()
-            self.target_loss_events = getattr(self, 'target_loss_events', 0) + 1
-            logger.warning("Inactive tracker output received - publishing hover command")
-
-        self._set_hover_commands()
-        self.update_telemetry_metadata('target_lost', True)
-        return True
-
-    def should_process_inactive_tracker_output(self, tracker_data: TrackerOutput) -> bool:
-        """
-        Allow inactive position outputs to publish the hover target-loss command.
-
-        Inactive tracker output must not run normal pursuit math even when it
-        carries last-known valid coordinates.
-        """
-        return self._is_inactive_tracker_output(
-            tracker_data,
-            allowed_types={
-                TrackerDataType.POSITION_2D,
-                TrackerDataType.POSITION_3D,
-                TrackerDataType.BBOX_CONFIDENCE,
-                TrackerDataType.VELOCITY_AWARE,
-                TrackerDataType.MULTI_TARGET,
-            },
-        )
-
     # ==================== Status and Telemetry ====================
 
     def get_follower_status(self) -> Dict[str, Any]:
@@ -910,13 +806,10 @@ class MCAttitudeRateFollower(BaseFollower):
                 'dive_started': self.dive_started,
                 'last_bank_angle': self.last_bank_angle,
                 'last_thrust_command': self.last_thrust_command,
-                'target_lost': self.target_lost,
-                'target_loss_action': self.target_loss_action.value,
                 'emergency_stop_active': self.emergency_stop_active,
                 'altitude_violation_count': self.altitude_violation_count,
                 'smoothed_los_rate': self.smoothed_los_rate,
                 'total_commands_issued': self.total_commands_issued,
-                'target_loss_events': self.target_loss_events,
                 'initial_altitude': self.initial_altitude,
                 'config': {
                     'max_rates': [degrees(self.max_pitch_rate_rad),
@@ -942,15 +835,11 @@ class MCAttitudeRateFollower(BaseFollower):
             report += f"Dive Started: {'YES' if status.get('dive_started', False) else 'NO'}\n"
             report += f"Last Thrust: {status.get('last_thrust_command', 0.0):.3f}\n"
             report += f"Bank Angle: {status.get('last_bank_angle', 0.0):.1f}°\n"
-            report += f"\nTarget Status:\n"
-            report += f"  Lost: {'YES' if status.get('target_lost', False) else 'NO'}\n"
-            report += f"  Loss Action: {status.get('target_loss_action', 'hover').upper()}\n"
             report += f"\nSafety Status:\n"
             report += f"  Emergency Stop: {'ACTIVE' if status.get('emergency_stop_active', False) else 'Inactive'}\n"
             report += f"  Altitude Violations: {status.get('altitude_violation_count', 0)}\n"
             report += f"\nStatistics:\n"
             report += f"  Commands Issued: {status.get('total_commands_issued', 0)}\n"
-            report += f"  Target Loss Events: {status.get('target_loss_events', 0)}\n"
             report += f"{'='*60}\n"
 
             return report
@@ -975,8 +864,6 @@ class MCAttitudeRateFollower(BaseFollower):
     def reset_follower_state(self) -> None:
         """Resets follower state to initial conditions."""
         self.dive_started = False
-        self.target_lost = False
-        self.target_loss_start_time = None
         self.emergency_stop_active = False
         self.altitude_violation_count = 0
         self.smoothed_pitch_rate = 0.0

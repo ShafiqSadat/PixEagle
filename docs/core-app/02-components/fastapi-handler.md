@@ -237,8 +237,9 @@ Dashboard/API/MCP consumers that need follower setpoint values should prefer
 `GET /api/v1/following/telemetry` instead of the legacy
 `/telemetry/follower_data` payload. It returns `schema_version`, `source`,
 `status`, `consumer_guidance`, `following_active`, `profile`, `fields`,
-`field_source`, optional `last_command_intent`, optional target-loss/safety/
-performance diagnostics, `circuit_breaker`, `command_publication`,
+`field_source`, optional `last_command_intent`, optional
+`continuity`/safety/performance diagnostics, `circuit_breaker`,
+`command_publication`,
 flight-mode hints, `legacy_payload_keys`, `health_issues`, `reason`,
 `claim_boundary`, and `timestamp`.
 

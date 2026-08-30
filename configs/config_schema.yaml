@@ -1,4 +1,4 @@
-schema_version: 1.6.0
+schema_version: 1.7.0
 meta:
   project: PixEagle
   generated_from: configs/config_default.yaml
@@ -3477,8 +3477,6 @@ sections:
           CONTROL_UPDATE_RATE: 20.0
           COMMAND_SMOOTHING_ENABLED: true
           SMOOTHING_FACTOR: 0.8
-          TARGET_LOSS_TIMEOUT: 3.0
-          TARGET_LOSS_COORDINATE_THRESHOLD: 1.5
           LATERAL_GUIDANCE_MODE: coordinated_turn
           ENABLE_AUTO_MODE_SWITCHING: false
           GUIDANCE_MODE_SWITCH_VELOCITY: 3.0
@@ -3524,25 +3522,6 @@ sections:
             min: 0.0
             max: 1.0
             step: 0.01
-          TARGET_LOSS_TIMEOUT:
-            type: float
-            default: 3.0
-            description: seconds — coast duration before loss action
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0.0
-            max: 100.0
-            step: 0.1
-            unit: s
-          TARGET_LOSS_COORDINATE_THRESHOLD:
-            type: float
-            default: 1.5
-            description: Normalized coord threshold for lost target
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0.0
-            max: 100.0
-            step: 0.1
           LATERAL_GUIDANCE_MODE:
             type: string
             default: coordinated_turn
@@ -3697,8 +3676,6 @@ sections:
         - CONTROL_UPDATE_RATE
         - COMMAND_SMOOTHING_ENABLED
         - SMOOTHING_FACTOR
-        - TARGET_LOSS_TIMEOUT
-        - TARGET_LOSS_COORDINATE_THRESHOLD
         - LATERAL_GUIDANCE_MODE
         - ENABLE_AUTO_MODE_SWITCHING
         - GUIDANCE_MODE_SWITCH_VELOCITY
@@ -3711,12 +3688,9 @@ sections:
       FollowerOverrides:
         type: object
         default:
-          MC_VELOCITY_CHASE:
-            TARGET_LOSS_TIMEOUT: 2.0
           MC_ATTITUDE_RATE:
             CONTROL_UPDATE_RATE: 50.0
             SMOOTHING_FACTOR: 0.85
-            TARGET_LOSS_TIMEOUT: 2.0
           FW_ATTITUDE_RATE:
             SMOOTHING_FACTOR: 0.85
           GM_VELOCITY_VECTOR:
@@ -3761,23 +3735,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -3936,23 +3893,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -4111,23 +4051,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -4258,8 +4181,7 @@ sections:
             additional_properties: false
           MC_VELOCITY_CHASE:
             type: object
-            default:
-              TARGET_LOSS_TIMEOUT: 2.0
+            default: {}
             description: Sparse operational overrides for MC_VELOCITY_CHASE; omitted values inherit the complete Follower.General
               contract
             reload_tier: follower_restart
@@ -4287,23 +4209,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -4462,23 +4367,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -4639,23 +4527,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -4815,23 +4686,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -4965,7 +4819,6 @@ sections:
             default:
               CONTROL_UPDATE_RATE: 50.0
               SMOOTHING_FACTOR: 0.85
-              TARGET_LOSS_TIMEOUT: 2.0
             description: Sparse operational overrides for MC_ATTITUDE_RATE; omitted values inherit the complete Follower.General
               contract
             reload_tier: follower_restart
@@ -4993,23 +4846,6 @@ sections:
                 min: 0.0
                 max: 1.0
                 step: 0.01
-              TARGET_LOSS_TIMEOUT:
-                type: float
-                description: seconds — coast duration before loss action
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
-                unit: s
-              TARGET_LOSS_COORDINATE_THRESHOLD:
-                type: float
-                description: Normalized coord threshold for lost target
-                reload_tier: follower_restart
-                reboot_required: false
-                min: 0.0
-                max: 100.0
-                step: 0.1
               LATERAL_GUIDANCE_MODE:
                 type: string
                 description: LATERAL_GUIDANCE_MODE parameter
@@ -5148,6 +4984,73 @@ sections:
       command path'
     reload_tier: immediate
     reboot_required: false
+  TargetContinuity:
+    display_name: Target Continuity
+    category: safety
+    icon: shield
+    parameters:
+      MODE:
+        type: string
+        default: immediate_handoff
+        description: Command-authority policy after confirmed target evidence is lost; bounded decay is currently qualified
+          for command preview only
+        reload_tier: follower_restart
+        reboot_required: false
+        options:
+        - value: immediate_handoff
+          label: Immediate handoff
+        - value: bounded_decay
+          label: Bounded decay
+      MAX_COAST_TIME_S:
+        type: float
+        default: 1.0
+        description: Hard elapsed-time budget for a qualified bounded-decay episode
+        reload_tier: follower_restart
+        reboot_required: false
+        min: 0.0
+        max: 10.0
+        step: 0.1
+        unit: s
+      MAX_COAST_DISTANCE_M:
+        type: float
+        default: 2.0
+        description: Hard integrated horizontal-distance budget for bounded decay
+        reload_tier: follower_restart
+        reboot_required: false
+        min: 0.0
+        max: 100.0
+        step: 0.1
+        unit: m
+      REACQUIRE_CONFIRMATION_S:
+        type: float
+        default: 0.5
+        description: Continuous confirmed-evidence interval required before authority restoration
+        reload_tier: follower_restart
+        reboot_required: false
+        min: 0.0
+        max: 10.0
+        step: 0.1
+        unit: s
+      AUTHORITY_RESTORE_TIME_S:
+        type: float
+        default: 1.0
+        description: Ramp duration from the continuity baseline to the nominal follower intent
+        reload_tier: follower_restart
+        reboot_required: false
+        min: 0.0
+        max: 10.0
+        step: 0.1
+        unit: s
+      TERMINAL_ACTION:
+        type: string
+        default: hold
+        description: Requested PX4 action after command authority is surrendered
+        reload_tier: follower_restart
+        reboot_required: false
+        options:
+        - value: hold
+          label: Hold
+    additional_properties: false
   GM_VELOCITY_CHASE:
     display_name: Gimbal Velocity Chase
     category: follower
@@ -5214,114 +5117,6 @@ sections:
         max: 100.0
         step: 0.1
         unit: m/s²
-      TARGET_LOSS_HANDLING:
-        type: object
-        default:
-          CONTINUE_VELOCITY_TIMEOUT: 3.0
-          ENABLE_RTL_ON_TIMEOUT: true
-          RTL_ALTITUDE: 50.0
-          ENABLE_ADAPTIVE_TIMEOUT: true
-          ADAPTIVE_TIMEOUT_FACTOR: 1.5
-          ENABLE_PREDICTIVE_VELOCITY: true
-          PREDICTION_HISTORY_SIZE: 5
-          CONFIDENCE_TIMEOUT_ADJUSTMENT: true
-          HIGH_CONFIDENCE_THRESHOLD: 0.8
-          LOW_CONFIDENCE_THRESHOLD: 0.3
-        description: TARGET_LOSS_HANDLING parameter
-        reload_tier: follower_restart
-        reboot_required: false
-        properties:
-          CONTINUE_VELOCITY_TIMEOUT:
-            type: float
-            default: 3.0
-            description: Continue last velocity for N seconds
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0.0
-            max: 100.0
-            step: 0.1
-            unit: s
-          ENABLE_RTL_ON_TIMEOUT:
-            type: boolean
-            default: true
-            description: Trigger RTL after timeout
-            reload_tier: follower_restart
-            reboot_required: false
-          RTL_ALTITUDE:
-            type: float
-            default: 50.0
-            description: RTL altitude (meters)
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0.0
-            max: 100.0
-            step: 0.1
-            unit: meters
-          ENABLE_ADAPTIVE_TIMEOUT:
-            type: boolean
-            default: true
-            description: Adjust timeout based on target movement/confidence
-            reload_tier: follower_restart
-            reboot_required: false
-          ADAPTIVE_TIMEOUT_FACTOR:
-            type: float
-            default: 1.5
-            description: Multiplier for fast-moving targets
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0.0
-            max: 100.0
-            step: 0.1
-          ENABLE_PREDICTIVE_VELOCITY:
-            type: boolean
-            default: true
-            description: Use movement prediction during loss
-            reload_tier: follower_restart
-            reboot_required: false
-          PREDICTION_HISTORY_SIZE:
-            type: integer
-            default: 5
-            description: Number of samples for prediction
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0
-            max: 100
-          CONFIDENCE_TIMEOUT_ADJUSTMENT:
-            type: boolean
-            default: true
-            description: Adjust timeout based on tracking confidence
-            reload_tier: follower_restart
-            reboot_required: false
-          HIGH_CONFIDENCE_THRESHOLD:
-            type: float
-            default: 0.8
-            description: High confidence threshold
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0.0
-            max: 1.0
-            step: 0.01
-          LOW_CONFIDENCE_THRESHOLD:
-            type: float
-            default: 0.3
-            description: Low confidence threshold
-            reload_tier: follower_restart
-            reboot_required: false
-            min: 0.0
-            max: 1.0
-            step: 0.01
-        required:
-        - CONTINUE_VELOCITY_TIMEOUT
-        - ENABLE_RTL_ON_TIMEOUT
-        - RTL_ALTITUDE
-        - ENABLE_ADAPTIVE_TIMEOUT
-        - ADAPTIVE_TIMEOUT_FACTOR
-        - ENABLE_PREDICTIVE_VELOCITY
-        - PREDICTION_HISTORY_SIZE
-        - CONFIDENCE_TIMEOUT_ADJUSTMENT
-        - HIGH_CONFIDENCE_THRESHOLD
-        - LOW_CONFIDENCE_THRESHOLD
-        additional_properties: false
       SAFETY_RETURN_SPEED:
         type: float
         default: 3.0
@@ -5479,22 +5274,6 @@ sections:
         min: 0.0
         max: 1.0
         step: 0.01
-      ENABLE_VELOCITY_DECAY:
-        type: boolean
-        default: true
-        description: Gradually reduce velocity during loss
-        reload_tier: follower_restart
-        reboot_required: false
-      VELOCITY_DECAY_RATE:
-        type: float
-        default: 0.5
-        description: m/s² - deceleration rate during target loss
-        reload_tier: follower_restart
-        reboot_required: false
-        min: 0.0
-        max: 1.0
-        step: 0.01
-        unit: m/s²
       MOUNT_ROLL_OFFSET_DEG:
         type: float
         default: 0.0
@@ -5569,22 +5348,6 @@ sections:
         max: 20.0
         step: 0.05
         unit: m/s²
-      RAMP_DOWN_ON_TARGET_LOSS:
-        type: boolean
-        default: true
-        description: Decelerate when target lost
-        reload_tier: follower_restart
-        reboot_required: false
-      TARGET_LOSS_STOP_VELOCITY:
-        type: float
-        default: 0.0
-        description: Forward velocity to hold when target is temporarily lost (m/s)
-        reload_tier: follower_restart
-        reboot_required: false
-        min: 0.0
-        max: 30.0
-        step: 0.1
-        unit: m/s
       MAX_TRACKING_ERROR:
         type: float
         default: 1.5
@@ -6197,16 +5960,6 @@ sections:
         min: 0.0
         max: 1.0
         step: 0.01
-      ORBIT_RADIUS:
-        type: float
-        default: 100.0
-        description: Loiter orbit radius on target loss (meters)
-        reload_tier: follower_restart
-        reboot_required: false
-        min: 10.0
-        max: 2000.0
-        step: 5.0
-        unit: m
     additional_properties: false
   MC_ATTITUDE_RATE:
     display_name: MC Attitude Rate
@@ -6399,12 +6152,6 @@ sections:
         min: 0.0
         max: 1.0
         step: 0.01
-      RAMP_DOWN_ON_TARGET_LOSS:
-        type: boolean
-        default: true
-        description: Gradually reduce rates on loss
-        reload_tier: follower_restart
-        reboot_required: false
       MAX_TRACKING_ERROR:
         type: float
         default: 1.5
@@ -7639,7 +7386,6 @@ sections:
           MAX_ROLL_RATE: 45.0
           EMERGENCY_STOP_ENABLED: true
           RTL_ON_VIOLATION: true
-          TARGET_LOSS_ACTION: hover
           MAX_SAFETY_VIOLATIONS: 5
         description: Complete non-bypassable safety envelope; every canonical field is required and follower profiles may
           only tighten it
@@ -7659,7 +7405,6 @@ sections:
         - MAX_ROLL_RATE
         - EMERGENCY_STOP_ENABLED
         - RTL_ON_VIOLATION
-        - TARGET_LOSS_ACTION
         - MAX_SAFETY_VIOLATIONS
         additional_properties: false
         properties:
@@ -7781,23 +7526,6 @@ sections:
             description: Request return-to-launch for configured safety violations
             reload_tier: follower_restart
             reboot_required: false
-          TARGET_LOSS_ACTION:
-            type: string
-            default: hover
-            description: Safety action requested when the active target is lost
-            reload_tier: follower_restart
-            reboot_required: false
-            options:
-            - value: hover
-              label: Hover
-            - value: orbit
-              label: Orbit
-            - value: stop
-              label: Stop
-            - value: rtl
-              label: Return to launch
-            - value: continue
-              label: Continue
           MAX_SAFETY_VIOLATIONS:
             type: integer
             default: 5
@@ -7812,7 +7540,6 @@ sections:
           FW_ATTITUDE_RATE:
             MAX_PITCH_RATE: 20.0
             MAX_YAW_RATE: 25.0
-            TARGET_LOSS_ACTION: orbit
           MC_VELOCITY_POSITION:
             MAX_YAW_RATE: 10.0
           MC_VELOCITY_DISTANCE:
@@ -7935,22 +7662,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation
@@ -8074,22 +7785,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation
@@ -8213,22 +7908,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation
@@ -8351,22 +8030,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation
@@ -8489,22 +8152,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation
@@ -8627,22 +8274,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation
@@ -8657,7 +8288,6 @@ sections:
             default:
               MAX_PITCH_RATE: 20.0
               MAX_YAW_RATE: 25.0
-              TARGET_LOSS_ACTION: orbit
             description: Sparse tightening safety limits for FW_ATTITUDE_RATE; omitted limits inherit the hard Safety.GlobalLimits
               envelope
             reload_tier: follower_restart
@@ -8768,22 +8398,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation
@@ -8906,22 +8520,6 @@ sections:
                 description: Request return-to-launch for configured safety violations
                 reload_tier: follower_restart
                 reboot_required: false
-              TARGET_LOSS_ACTION:
-                type: string
-                description: Safety action requested when the active target is lost
-                reload_tier: follower_restart
-                reboot_required: false
-                options:
-                - value: hover
-                  label: Hover
-                - value: orbit
-                  label: Orbit
-                - value: stop
-                  label: Stop
-                - value: rtl
-                  label: Return to launch
-                - value: continue
-                  label: Continue
               MAX_SAFETY_VIOLATIONS:
                 type: integer
                 description: Maximum counted safety violations before escalation

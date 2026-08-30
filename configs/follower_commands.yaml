@@ -6,7 +6,7 @@
 # profile definitions and enables extensible follower modes.
 
 # Schema version for future compatibility
-schema_version: "2.0.0"
+schema_version: "2.1.0"
 
 # ==============================================================================
 # Command Field Definitions
@@ -98,6 +98,7 @@ follower_profiles:
     display_name: "MC Velocity Ground"
     description: "Full velocity control for tracking ground targets"
     control_type: "velocity_body_offboard"
+    airframe_phase: "multicopter"
     required_fields: ["vel_body_fwd", "vel_body_right", "vel_body_down", "yawspeed_deg_s"]
     ui_category: "velocity"
     # Schema-driven tracker data requirements
@@ -109,6 +110,7 @@ follower_profiles:
     display_name: "MC Visual Centering"
     description: "Compatibility profile with zero forward velocity, lateral centering, optional vertical control and yaw; no range hold"
     control_type: "velocity_body_offboard"
+    airframe_phase: "multicopter"
     # Use MAVSDK-native body velocity fields and degrees/sec for yaw
     required_fields: ["vel_body_fwd", "vel_body_right", "vel_body_down", "yawspeed_deg_s"]
     ui_category: "velocity"
@@ -120,6 +122,7 @@ follower_profiles:
     display_name: "MC Velocity Position"
     description: "Stationary profile: zero forward/right, visual yaw, optional vertical control"
     control_type: "velocity_body_offboard"
+    airframe_phase: "multicopter"
     # Publish a complete MAVSDK body-velocity snapshot. Forward/right remain zero.
     # vel_body_down is positive down; follower negates its up-positive command.
     required_fields: ["vel_body_fwd", "vel_body_right", "vel_body_down", "yawspeed_deg_s"]
@@ -132,6 +135,7 @@ follower_profiles:
     display_name: "MC Velocity Chase"
     description: "Pursuit profile: forward ramp with yaw or sideslip and optional vertical control"
     control_type: "velocity_body_offboard"
+    airframe_phase: "multicopter"
     required_fields: ["vel_body_fwd", "vel_body_right", "vel_body_down", "yawspeed_deg_s"]
     ui_category: "velocity"
     # Schema-driven tracker data requirements
@@ -143,6 +147,7 @@ follower_profiles:
     display_name: "GM PID Pursuit"
     description: "PID-based pursuit control with coordinated turn guidance from gimbal angles"
     control_type: "velocity_body_offboard"  # Use body velocity offboard for body frame commands
+    airframe_phase: "multicopter"           # Gimbal is the evidence source, not the vehicle type
     required_fields: ["vel_body_fwd", "vel_body_right", "vel_body_down", "yawspeed_deg_s"]
     ui_category: "gimbal"
     # Schema-driven tracker data requirements
@@ -154,6 +159,7 @@ follower_profiles:
     display_name: "GM Velocity Vector"
     description: "Direct vector pursuit using gimbal angles and body frame velocity"
     control_type: "velocity_body_offboard"
+    airframe_phase: "multicopter"           # Gimbal is the evidence source, not the vehicle type
     required_fields: ["vel_body_fwd", "vel_body_right", "vel_body_down", "yawspeed_deg_s"]
     ui_category: "gimbal"
     # Schema-driven tracker data requirements
@@ -165,6 +171,7 @@ follower_profiles:
     display_name: "FW Attitude Rate"
     description: "Fixed-wing visual guidance with L1/TECS-inspired rate and thrust control"
     control_type: "attitude_rate"
+    airframe_phase: "fixed_wing"
     # Publishes MAVSDK attitude-rate and thrust fields.
     required_fields: ["rollspeed_deg_s", "pitchspeed_deg_s", "yawspeed_deg_s", "thrust"]
     ui_category: "attitude"
@@ -177,6 +184,7 @@ follower_profiles:
     display_name: "MC Attitude Rate"
     description: "High-authority multicopter visual control using attitude rates and thrust"
     control_type: "attitude_rate"
+    airframe_phase: "multicopter"
     # Uses set_attitude_rate() - direct angular rate commands + thrust
     required_fields: ["rollspeed_deg_s", "pitchspeed_deg_s", "yawspeed_deg_s", "thrust"]
     ui_category: "attitude"

@@ -93,16 +93,12 @@ pid = CustomPID(
 output = pid(current_error)
 ```
 
-### Target Loss Handling
+### Target Continuity
 
-Multicopter followers can hover on target loss:
-
-```python
-# In config.yaml
-MC_VELOCITY_CHASE:
-  TARGET_LOSS_ACTION: "hover"    # or "rtl", "slow_forward"
-  TARGET_LOSS_TIMEOUT: 2.0       # seconds
-```
+All profiles use the shared target-evidence authority policy. Followers do not
+own loss timers or loss commands. The default is immediate handoff; the optional
+bounded-decay strategy is command-preview-only until separately qualified. See
+[Target Continuity](../06-safety/target-continuity.md).
 
 ### Safety Limits
 
@@ -122,7 +118,7 @@ vel_fwd, vel_right, vel_down = self.clamp_velocity(15.0, 8.0, 5.0)
 
 | Vehicle | Recommended Follower | Reason |
 |---------|---------------------|--------|
-| Quadcopter | `mc_velocity_chase` | Velocity ramping, hover on loss |
+| Quadcopter | `mc_velocity_chase` | Velocity-ramped pursuit |
 | Fixed-wing | `fw_attitude_rate` | Current visual attitude-rate profile; airframe acceptance required |
 | Gimbal-only | `gm_velocity_chase` | Direct gimbal control |
 

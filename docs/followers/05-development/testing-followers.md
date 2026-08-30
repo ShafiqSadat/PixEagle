@@ -113,29 +113,18 @@ pytest tests/test_followers/test_my_follower.py
 pytest --cov=src/classes/followers tests/
 ```
 
-### Target-Loss Publication Tests
+### Target Continuity Tests
 
-Follower tests must distinguish "target unavailable" from "no command should be
-published." If a follower uses inactive tracker output to hover, stop, orbit,
-coast, or decay a command, add tests that prove:
-
-- `should_process_inactive_tracker_output()` returns `True` only for supported
-  inactive tracker data types;
-- `follow_target()` returns `True` when it produced or intentionally retained a
-  `CommandIntent` that must be submitted to `OffboardCommander`;
-- `follow_target()` returns `False` when the policy requests a mode change such
-  as RTL and no further Offboard setpoint should be published;
-- `AppController.follow_target()` submits the latest intent to
-  `OffboardCommander` after that follower opt-in and does not call PX4 send
-  methods from the frame loop.
+Follower tests prove nominal command math only. Shared continuity tests must
+prove that inactive, stale, prediction-only, ambiguous, or wrong-session
+evidence bypasses every follower; that only qualified command classes can enter
+bounded decay; that time and distance budgets cannot be reset by flapping; and
+that terminal handoff stops publication and records observed success or failure.
 
 Current regression coverage lives in
-`tests/unit/followers/test_target_loss_safe_publication.py` and
-`tests/unit/core_app/test_app_controller_offboard_safety.py`.
-The coverage includes legacy multicopter velocity modes, gimbal-aware modes,
-multicopter attitude-rate hover, and fixed-wing orbit/RTL/continue target-loss
-policies. It also covers stale SmartTracker `MULTI_TARGET` output so multi-
-target overlays cannot prevent fail-closed command publication.
+`tests/unit/core_app/test_target_continuity.py`,
+`tests/unit/core_app/test_app_controller_offboard_safety.py`, and
+`tests/unit/trackers/test_tracker_in_loop_validation.py`.
 
 ### Command-Freshness Tests
 
@@ -147,11 +136,10 @@ carry coordinates:
 - prediction-only tracker outputs keep diagnostic position data but set
   `data_is_stale: true` and `usable_for_following: false`;
 - `AppController.follow_target()` converts those active-looking outputs into
-  inactive fail-closed `TrackerOutput` before follower dispatch;
-- a hard video stall calls `handle_video_frame_unavailable()` so PX4 following
-  does not silently skip the safe target-loss command path.
-- inactive output cannot reach a follower unless `AppController` confirms the
-  concrete follower's explicit inactive-output opt-in, even if compatibility
+  non-confirmed target evidence before follower dispatch;
+- a hard video stall calls `handle_video_frame_unavailable()` and routes
+  directly to the shared authority supervisor;
+- inactive output cannot reach follower command math, even if compatibility
   validation would otherwise pass.
 
 Regression coverage for this contract is in

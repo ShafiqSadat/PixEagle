@@ -28,21 +28,24 @@ import os
 def mock_schema():
     """Create a mock schema for testing."""
     return {
-        'schema_version': '2.0.0',
+        'schema_version': '2.1.0',
         'follower_profiles': {
             'mc_velocity_chase': {
                 'control_type': 'velocity_body_offboard',
+                'airframe_phase': 'multicopter',
                 'display_name': 'MC Velocity Chase',
                 'description': 'Body-frame velocity control',
                 'required_fields': ['vel_body_fwd', 'vel_body_right', 'vel_body_down', 'yawspeed_deg_s']
             },
             'fw_attitude_rate': {
                 'control_type': 'attitude_rate',
+                'airframe_phase': 'fixed_wing',
                 'display_name': 'FW Attitude Rate',
                 'description': 'Angular rate control',
                 'required_fields': ['rollspeed_deg_s', 'pitchspeed_deg_s', 'yawspeed_deg_s', 'thrust']
             },
             'mc_velocity_position': {
+                'airframe_phase': 'multicopter',
                 'control_type': 'velocity_body_offboard',
                 'display_name': 'MC Velocity Position',
                 'description': 'Position-based velocity control',
@@ -561,7 +564,7 @@ class TestFollowerCommandSchemaContract:
         path = Path(__file__).resolve().parents[3] / 'configs' / 'follower_commands.yaml'
         contract = SetpointHandler.load_and_validate_schema(path)
 
-        assert contract['schema_version'] == '2.0.0'
+        assert contract['schema_version'] == '2.1.0'
         assert contract['removed_profile_aliases']['mc_velocity'] == 'mc_velocity_chase'
         assert contract['control_types']['velocity_body_offboard']['mavsdk_method'] == (
             'set_velocity_body'

@@ -707,7 +707,7 @@ export const normalizeFollowingTelemetry = (data) => {
     available_fields: profile.available_fields || [],
     validation_status: Boolean(profile.profile_valid),
     circuit_breaker_active: data.circuit_breaker_active,
-    target_loss_handler: data.target_loss_handler || null,
+    continuity: data.continuity || null,
     safety_systems: data.safety_systems || null,
     performance: data.performance || null,
     execution_mode: String(

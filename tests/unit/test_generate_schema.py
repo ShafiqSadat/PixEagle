@@ -709,13 +709,12 @@ def test_parse_config_options_comment_extracted():
 
     config, comments = parse_config_with_comments(config_path)
 
-    # TARGET_LOSS_ACTION should have an Options: comment
-    # (present in multiple follower sections)
+    # TargetContinuity.MODE should publish its finite operator choices.
     options_comments = {
         k: v for k, v in comments.items()
-        if 'Options:' in v and 'TARGET_LOSS_ACTION' in k
+        if 'Options:' in v and k == 'TargetContinuity.MODE'
     }
-    assert len(options_comments) > 0, "Expected Options: comment on TARGET_LOSS_ACTION"
+    assert len(options_comments) == 1
 
 
 # ---- config_validator.py tests ----
@@ -836,27 +835,13 @@ def test_normalize_safety_config_allows_tighter_and_vehicle_specific_override():
         'MIN_ALTITUDE': 30.0,
         'MAX_ALTITUDE': 100.0,
         'MAX_PITCH_RATE': 20.0,
-        'TARGET_LOSS_ACTION': 'orbit',
     }
 
     normalized = normalize_safety_config(config, require_safety=True)
 
     assert normalized['Safety']['FollowerOverrides']['FW_ATTITUDE_RATE'][
-        'TARGET_LOSS_ACTION'
-    ] == 'orbit'
-
-
-def test_normalize_safety_config_rejects_target_loss_policy_weakening():
-    from classes.config_validator import normalize_safety_config
-
-    config = _valid_safety_config()
-    config['Safety']['GlobalLimits']['TARGET_LOSS_ACTION'] = 'rtl'
-    config['Safety']['FollowerOverrides']['FW_ATTITUDE_RATE'] = {
-        'TARGET_LOSS_ACTION': 'orbit',
-    }
-
-    with pytest.raises(ValueError, match='weakens the hard global safety envelope'):
-        normalize_safety_config(config, require_safety=True)
+        'MAX_PITCH_RATE'
+    ] == 20.0
 
 
 def test_validate_safety_config_skips_missing_sections():
