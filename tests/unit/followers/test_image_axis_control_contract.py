@@ -297,8 +297,6 @@ def test_chase_emergency_stop_bypasses_yaw_smoothing_history():
     follower.ramp_update_rate = 10.0
     follower.extract_target_coordinates = MagicMock(return_value=(0.4, 0.0))
     follower.validate_target_coordinates = MagicMock(return_value=True)
-    follower.target_confidence_threshold = 0.5
-    follower.max_reasonable_target_velocity = 100.0
     follower._update_forward_velocity = MagicMock(return_value=3.0)
     follower._calculate_tracking_commands = MagicMock(return_value=(1.0, 0.5, 0.4))
     follower.adaptive_mode_enabled = False
@@ -331,14 +329,12 @@ def test_chase_emergency_stop_bypasses_yaw_smoothing_history():
     assert follower.set_command_fields.call_count == 1
 
 
-def test_chase_command_path_ramps_forward_and_preserves_yaw_direction():
+def test_chase_uses_prequalified_evidence_and_preserves_yaw_direction():
     follower = MCVelocityChaseFollower.__new__(MCVelocityChaseFollower)
     follower.last_ramp_update_time = 99.0
     follower.ramp_update_rate = 10.0
     follower.extract_target_coordinates = MagicMock(return_value=(0.4, 0.0))
     follower.validate_target_coordinates = MagicMock(return_value=True)
-    follower.target_confidence_threshold = 0.5
-    follower.max_reasonable_target_velocity = 100.0
     follower.emergency_stop_active = False
     follower.max_forward_velocity = 8.0
     follower.forward_ramp_rate = 2.0
@@ -356,9 +352,10 @@ def test_chase_command_path_ramps_forward_and_preserves_yaw_direction():
 
     with patch('classes.followers.base_follower.time.monotonic', return_value=100.0):
         follower.calculate_control_commands(
-            MagicMock(confidence=1.0, velocity=None)
+            MagicMock(confidence=0.01, velocity=(10_000.0, -10_000.0))
         )
 
+    follower.validate_target_coordinates.assert_called_once_with((0.4, 0.0))
     command = follower.set_command_fields.call_args.args[0]
     assert command['vel_body_fwd'] == pytest.approx(0.2)
     assert command['yawspeed_deg_s'] == pytest.approx(11.4591559026)

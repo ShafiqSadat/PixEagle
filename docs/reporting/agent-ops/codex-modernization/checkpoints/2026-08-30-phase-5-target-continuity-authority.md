@@ -2,7 +2,7 @@
 
 Date: 2026-08-30
 Issue: PXE-0169
-Status: implementation and repository validation complete; PX4 acceptance pending
+Status: implementation and VPS command-preview validation complete; PX4 acceptance pending
 
 ## Problem
 
@@ -37,19 +37,30 @@ operator configuration without silently preserving old authority behavior.
 
 ## Validation
 
-- Broad affected backend/controller/follower/API/SITL-contract suite: `770 passed`
+- Affected controller/follower/API/config regression suite: `284 passed`
+- Complete follower contract suite: `187 passed`
 - Required Phase 0 API/reload gate: `73 passed`
 - Follower-command/drone-interface contract subset: `172 passed`
-- Full dashboard: `59` suites, `405` tests passed
+- Full dashboard from the preceding frontend part of this slice: `59` suites,
+  `405` tests passed; this follow-up changed no dashboard files
 - Dashboard lint: passed
 - Dashboard production build: passed
-- `bash scripts/check_schema.sh`: passed (`43` sections, `605` parameters)
+- Active documentation consistency: `31 passed`
+- `bash scripts/check_schema.sh`: passed (`43` sections, `603` parameters)
 - Python syntax compilation for touched runtime modules: passed
 - `git diff --check`: passed
+- Authenticated public browser workflow on run
+  `pixeagle_manual_396dd27e-dae6-4dc7-9e53-9c00f901e672`: passed
+- CSRT target selection reached `active_usable`; Circuit Breaker remained active;
+  MC Velocity Chase produced 29 consecutive sampled intents while forward
+  velocity ramped from `0.05` to `0.5 m/s`
+- Every command-preview sample reported `commands_sent_to_px4=false`; no MAVSDK
+  Server, MAVLink2REST process, or listener on TCP `50051`/`8088` was present
 
 ## Evidence Boundary
 
-These results establish process-local logic and command-preview contracts only.
+These results establish process-local logic, browser control-path, and
+command-preview contracts only.
 No PX4, SITL, HIL, Raspberry Pi, camera, vehicle-response, flight, or field
 success is claimed. Before live acceptance, record exact PX4 mode transition,
 publisher shutdown, telemetry, ULog/tlog, vehicle configuration, and operator
@@ -57,8 +68,7 @@ abort evidence. Bounded live coasting remains disabled.
 
 ## Next Test
 
-Run the bundled command-preview workflow with `TargetContinuity.MODE` first set
-to `immediate_handoff`, then explicitly to `bounded_decay`. Verify fresh command
-intent, loss state, immutable episode budget during recovery flapping, stable
-reacquisition, and inactive teardown through typed telemetry. Do not use this
+Complete operator browser acceptance, then run the planned SITL matrix with
+`TargetContinuity.MODE` first set to `immediate_handoff`, then explicitly to
+`bounded_decay`. Verify PX4 mode/handoff evidence separately. Do not use this
 preview result as flight evidence.

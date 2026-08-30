@@ -12,6 +12,9 @@ Trackers may keep predictions and last-known geometry for display and
 reacquisition. Those estimates do not independently authorize vehicle commands.
 Followers calculate nominal commands only from confirmed evidence; they do not
 implement their own loss timers, hover/orbit actions, or inactive-output paths.
+They also do not reclassify confidence or image-plane velocity. Tracker evidence
+qualification is the single authority for those measurements; followers retain
+only finite/profile-specific coordinate and command validation.
 
 ## Authority States
 

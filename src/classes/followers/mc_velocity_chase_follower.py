@@ -202,10 +202,6 @@ class MCVelocityChaseFollower(BaseFollower):
         self.video_height_pixels = config.get('VIDEO_HEIGHT_PIXELS', 480.0)
         # Velocity deadzone for ramping logic (was hardcoded 0.01 m/s)
         self.forward_velocity_deadzone = config.get('FORWARD_VELOCITY_DEADZONE', 0.01)
-        # v5.7.1: Target validation thresholds (were hardcoded)
-        self.target_confidence_threshold = config.get('TARGET_CONFIDENCE_THRESHOLD', 0.5)
-        self.max_reasonable_target_velocity = config.get('MAX_REASONABLE_TARGET_VELOCITY', 50.0)
-
         # === v5.7.0: YawRateSmoother configuration (from FollowerConfigManager) ===
         yaw_smoothing_config = fcm.get_yaw_smoothing_config(_fn)
         self.yaw_smoother = YawRateSmoother.from_config(yaw_smoothing_config)
@@ -1359,7 +1355,9 @@ class MCVelocityChaseFollower(BaseFollower):
                 logger.warning("No valid target coordinates found in tracker data")
                 return False
             
-            if not self._validate_command_measurement(target_coords, tracker_data):
+            # Tracker evidence is qualified once by AppController before it
+            # reaches follower math. Keep only profile-input validation here.
+            if not self.validate_target_coordinates(target_coords):
                 return False
             tracking_coords = target_coords
             
@@ -1780,46 +1778,6 @@ class MCVelocityChaseFollower(BaseFollower):
             
         except Exception as e:
             logger.error(f"Error forcing lateral mode to {mode}: {e}")
-            return False
-
-    # ==================== Enhanced Tracker Data Methods ====================
-    
-    def _validate_command_measurement(self, target_coords: Tuple[float, float], tracker_data: TrackerOutput) -> bool:
-        """Validate profile-specific measurement limits without owning loss state.
-        
-        Args:
-            target_coords (Tuple[float, float]): Target coordinates
-            tracker_data (TrackerOutput): Structured tracker data with confidence
-            
-        Returns:
-            bool: True when follower math may consume this confirmed evidence.
-        """
-        try:
-            if not self.validate_target_coordinates(target_coords):
-                return False
-
-            # Enhance with confidence analysis if available (v5.7.1: configurable threshold)
-            if tracker_data.confidence is not None:
-                confidence_valid = tracker_data.confidence >= self.target_confidence_threshold
-
-                if not confidence_valid:
-                    logger.debug(f"Target confidence too low: {tracker_data.confidence:.2f} < {self.target_confidence_threshold}")
-                    return False
-
-            # Consider velocity information if available (v5.7.1: configurable threshold)
-            if tracker_data.velocity is not None:
-                # Validate that velocity is reasonable
-                vx, vy = tracker_data.velocity
-                velocity_magnitude = np.sqrt(vx**2 + vy**2)
-
-                if velocity_magnitude > self.max_reasonable_target_velocity:
-                    logger.debug(f"Target velocity too high: {velocity_magnitude:.2f} > {self.max_reasonable_target_velocity}")
-                    return False
-
-            return True
-            
-        except Exception as e:
-            logger.error(f"Command measurement validation failed: {e}")
             return False
 
     # ==================== Schema-Driven Data Requirements ====================

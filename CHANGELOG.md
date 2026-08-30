@@ -15,6 +15,9 @@
   migration registry, require `airframe_phase` in follower command schema
   `2.1.0`, and update validation injections to distinguish accepted stimuli
   from rejected command dispatch and confirmed handoff outcomes.
+- Remove the obsolete MC Velocity Chase confidence and image-velocity gates.
+  Prequalified tracker evidence now reaches follower math without a second,
+  unit-inconsistent rejection that could immediately end command preview.
 - Separate the CSRT-family short-term appearance mismatch floor from the
   stricter detector-reacquisition identity gate. Moderate scene transitions no
   longer become false CSRT losses solely because they fall below the recovery

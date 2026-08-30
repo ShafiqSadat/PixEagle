@@ -548,3 +548,17 @@ retirements:
     retired_in_schema_version: 1.7.0
     reason: Target-loss terminal action is no longer follower-specific.
     replacement: [TargetContinuity, TERMINAL_ACTION]
+
+  - id: remove-mc-chase-confidence-gate-v1
+    path: [MC_VELOCITY_CHASE, TARGET_CONFIDENCE_THRESHOLD]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: Tracker evidence qualification is the single confidence authority before follower math.
+    replacement: null
+
+  - id: remove-mc-chase-image-velocity-gate-v1
+    path: [MC_VELOCITY_CHASE, MAX_REASONABLE_TARGET_VELOCITY]
+    action: remove
+    retired_in_schema_version: 1.7.0
+    reason: The follower-local gate duplicated tracker evidence qualification and assumed an obsolete image-velocity unit.
+    replacement: null

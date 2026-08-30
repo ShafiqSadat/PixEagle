@@ -5599,25 +5599,6 @@ sections:
         max: 1.0
         step: 0.01
         unit: m/s
-      TARGET_CONFIDENCE_THRESHOLD:
-        type: float
-        default: 0.5
-        description: Range 0-1, default 0.5
-        reload_tier: follower_restart
-        reboot_required: false
-        min: 0.0
-        max: 1.0
-        step: 0.01
-      MAX_REASONABLE_TARGET_VELOCITY:
-        type: float
-        default: 50.0
-        description: pixels/frame, default 50.0
-        reload_tier: follower_restart
-        reboot_required: false
-        min: 0.0
-        max: 100.0
-        step: 0.1
-        unit: px
     additional_properties: false
   MC_VELOCITY_POSITION:
     display_name: MC Velocity Position
