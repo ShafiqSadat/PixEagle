@@ -50,6 +50,7 @@ def _build_follower_stub() -> GMVelocityVectorFollower:
 
     follower.setpoint_handler = SimpleNamespace(
         get_control_type=MagicMock(return_value='velocity_body_offboard'),
+        get_airframe_phase=MagicMock(return_value='multicopter'),
         get_fields=MagicMock(side_effect=lambda: fields.copy()),
         set_fields=MagicMock(side_effect=set_fields),
     )
@@ -80,8 +81,8 @@ def _stale_gimbal_output() -> TrackerOutput:
 
 
 @pytest.mark.asyncio
-async def test_app_controller_dispatches_zero_command_for_unusable_gimbal_output():
-    """Inactive external gimbal output must reach the follower and PX4 sender."""
+async def test_app_controller_requests_handoff_for_unusable_gimbal_output():
+    """Inactive external gimbal output must not regain command authority."""
     tracker_output = _stale_gimbal_output()
     follower = _build_follower_stub()
     follower_manager = _build_follower_manager_stub(follower)
@@ -98,22 +99,27 @@ async def test_app_controller_dispatches_zero_command_for_unusable_gimbal_output
     )
     ctrl.offboard_commander = SimpleNamespace(
         submit_intent=MagicMock(return_value=True),
+        get_status=MagicMock(
+            return_value={
+                'running': True,
+                'task_active': True,
+                'failure_policy_triggered': False,
+                'terminal_failure': False,
+            }
+        ),
     )
+    ctrl._tracking_session_generation = 0
+    ctrl.following_execution_mode = 'COMMAND_PREVIEW'
+    ctrl._active_following_controller = SimpleNamespace(current_yaw=0.0)
+    ctrl._execute_target_continuity_handoff = AsyncMock()
 
     result = await ctrl.follow_target()
 
-    assert result is True
-    ctrl.offboard_commander.submit_intent.assert_called_once()
+    assert result is False
+    ctrl.offboard_commander.submit_intent.assert_not_called()
     ctrl.px4_interface.send_velocity_body_offboard_commands.assert_not_awaited()
     ctrl.px4_interface.send_attitude_rate_commands.assert_not_awaited()
-
-    follower.setpoint_handler.set_fields.assert_called_once_with(
-        {
-            "vel_body_fwd": 0.0,
-            "vel_body_right": 0.0,
-            "vel_body_down": 0.0,
-            "yawspeed_deg_s": 0.0,
-        },
-        source='GMVelocityVectorFollower',
-        reason='gm_velocity_vector_unusable_external_input',
+    follower.setpoint_handler.set_fields.assert_not_called()
+    ctrl._execute_target_continuity_handoff.assert_awaited_once_with(
+        'tracker_unusable_for_following'
     )
